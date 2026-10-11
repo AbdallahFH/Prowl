@@ -94,7 +94,7 @@ internal sealed class CommandExecutor
 
     private static bool[] BuildKeepsPrefix()
     {
-        var keeps = new bool[Enum.GetValues<CommandOpcode>().Length + 1];
+        bool[] keeps = new bool[Enum.GetValues<CommandOpcode>().Length + 1];
         foreach (CommandOpcode op in (ReadOnlySpan<CommandOpcode>)[
             CommandOpcode.SetRenderTarget, CommandOpcode.SetRenderTargets, CommandOpcode.SetViewport,
             CommandOpcode.SetScissor, CommandOpcode.DisableScissor, CommandOpcode.ClearRenderTarget,
@@ -121,9 +121,9 @@ internal sealed class CommandExecutor
 
     public void Execute(CommandBuffer cmd)
     {
-        var stream = cmd._stream.AsSpan(0, cmd._streamPos);
-        var objects = cmd._objects;
-        var store = cmd._store;
+        Span<byte> stream = cmd._stream.AsSpan(0, cmd._streamPos);
+        List<object?> objects = cmd._objects;
+        TransientStore store = cmd._store;
         int pos = 0;
 
         // Property bindings are snapshots owned by the buffer that encoded them, and go back to the
@@ -208,11 +208,11 @@ internal sealed class CommandExecutor
                 }
                 case CommandOpcode.SetRasterState:
                 {
-                    // Eager apply: old Graphics.SetState pushed to GL synchronously,
-                    // so a Clear after it saw the correct DepthMask. Lazy-apply would
-                    // let Clear run with stale DepthMask between frames and silently
-                    // skip the depth clear.
-                    var next = ReadStruct<RasterizerState>(stream, ref pos);
+                        // Eager apply: old Graphics.SetState pushed to GL synchronously,
+                        // so a Clear after it saw the correct DepthMask. Lazy-apply would
+                        // let Clear run with stale DepthMask between frames and silently
+                        // skip the depth clear.
+                        RasterizerState next = ReadStruct<RasterizerState>(stream, ref pos);
                     RasterStateApply.Apply(in next);
                     _raster = next;
                     _rasterInitialized = true;
@@ -426,7 +426,7 @@ internal sealed class CommandExecutor
                 {
                     string name = (string)objects[ReadI32(stream, ref pos)]!;
                     uint count = ReadU32(stream, ref pos);
-                    var blob = ReadBlob<Float4x4>(stream, ref pos, store);
+                        ReadOnlySpan<Float4x4> blob = ReadBlob<Float4x4>(stream, ref pos, store);
                     if (_boundProgram == null) break;
                     PropertyApply.SetMatrixArray(_boundProgram, name, (uint)count, blob);
                     break;
@@ -454,7 +454,7 @@ internal sealed class CommandExecutor
                 {
                     var buf = (GraphicsBuffer?)objects[ReadI32(stream, ref pos)];
                     uint dstOffset = ReadU32(stream, ref pos);
-                    var blob = ReadBlob<byte>(stream, ref pos, store);
+                        ReadOnlySpan<byte> blob = ReadBlob<byte>(stream, ref pos, store);
                     if (buf != null) DoUpdateBuffer(buf, dstOffset, blob);
                     break;
                 }
@@ -466,7 +466,7 @@ internal sealed class CommandExecutor
                     uint w = ReadU32(stream, ref pos);
                     uint h = ReadU32(stream, ref pos);
                     int mip = ReadI32(stream, ref pos);
-                    var blob = ReadBlob<byte>(stream, ref pos, store);
+                        ReadOnlySpan<byte> blob = ReadBlob<byte>(stream, ref pos, store);
                     if (tex != null) DoUpdateTexture(tex, mip, x, y, w, h, blob);
                     break;
                 }
@@ -536,7 +536,7 @@ internal sealed class CommandExecutor
                     var vao = (GraphicsVertexArray?)objects[ReadI32(stream, ref pos)];
                     Topology topo = (Topology)ReadU8(stream, ref pos);
                     bool i32 = ReadU8(stream, ref pos) != 0;
-                    var ranges = ReadBlob<IndexRange>(stream, ref pos, store);
+                        ReadOnlySpan<IndexRange> ranges = ReadBlob<IndexRange>(stream, ref pos, store);
                     DoDrawIndexedRanges(vao, topo, ranges, i32);
                     break;
                 }
@@ -544,7 +544,7 @@ internal sealed class CommandExecutor
                 {
                     var buf = (GraphicsBuffer)objects[ReadI32(stream, ref pos)]!;
                     bool dynamic = ReadU8(stream, ref pos) != 0;
-                    var data = ReadBlob<byte>(stream, ref pos, store);
+                        ReadOnlySpan<byte> data = ReadBlob<byte>(stream, ref pos, store);
                     buf.Handle = Graphics.GL.GenBuffer();
                     if (data.Length > 0)
                     {
@@ -595,7 +595,7 @@ internal sealed class CommandExecutor
                     uint w = ReadU32(stream, ref pos);
                     uint h = ReadU32(stream, ref pos);
                     int border = ReadI32(stream, ref pos);
-                    var data = ReadBlob<byte>(stream, ref pos, store);
+                        ReadOnlySpan<byte> data = ReadBlob<byte>(stream, ref pos, store);
                     unsafe
                     {
                         if (data.Length > 0)
@@ -616,8 +616,8 @@ internal sealed class CommandExecutor
                     int face = ReadI32(stream, ref pos);
                     int mip = ReadI32(stream, ref pos);
                     uint size = ReadU32(stream, ref pos);
-                    var data = ReadBlob<byte>(stream, ref pos, store);
-                    var faceTarget = TextureTarget.TextureCubeMapPositiveX + face;
+                        ReadOnlySpan<byte> data = ReadBlob<byte>(stream, ref pos, store);
+                        TextureTarget faceTarget = TextureTarget.TextureCubeMapPositiveX + face;
                     unsafe
                     {
                         if (data.Length > 0)
@@ -639,7 +639,7 @@ internal sealed class CommandExecutor
                     uint w = ReadU32(stream, ref pos);
                     uint h = ReadU32(stream, ref pos);
                     uint d = ReadU32(stream, ref pos);
-                    var data = ReadBlob<byte>(stream, ref pos, store);
+                        ReadOnlySpan<byte> data = ReadBlob<byte>(stream, ref pos, store);
                     unsafe
                     {
                         if (data.Length > 0)
@@ -664,7 +664,7 @@ internal sealed class CommandExecutor
                     uint w = ReadU32(stream, ref pos);
                     uint h = ReadU32(stream, ref pos);
                     uint d = ReadU32(stream, ref pos);
-                    var data = ReadBlob<byte>(stream, ref pos, store);
+                        ReadOnlySpan<byte> data = ReadBlob<byte>(stream, ref pos, store);
                     if (data.Length == 0) break;
                     unsafe
                     {
@@ -711,7 +711,7 @@ internal sealed class CommandExecutor
                 {
                     var tex = (GraphicsTexture)objects[ReadI32(stream, ref pos)]!;
                     int mip = ReadI32(stream, ref pos);
-                    var destination = (byte[])objects[ReadI32(stream, ref pos)]!;
+                        byte[] destination = (byte[])objects[ReadI32(stream, ref pos)]!;
                     unsafe
                     {
                         fixed (byte* p = destination)
@@ -724,7 +724,7 @@ internal sealed class CommandExecutor
                     var tex = (GraphicsTexture)objects[ReadI32(stream, ref pos)]!;
                     int face = ReadI32(stream, ref pos);
                     int mip = ReadI32(stream, ref pos);
-                    var destination = (byte[])objects[ReadI32(stream, ref pos)]!;
+                        byte[] destination = (byte[])objects[ReadI32(stream, ref pos)]!;
                     unsafe
                     {
                         fixed (byte* p = destination)
@@ -1070,7 +1070,7 @@ internal sealed class CommandExecutor
             // in DrawRenderables also benefits without needing an explicit cmd.SetBuffer.
             // PropertyApply.BindUniformBuffer skips when the program doesn't declare the
             // block, so shaders that don't use it pay nothing.
-            var globalBuf = Rendering.GlobalUniforms.GetBuffer();
+            GraphicsBuffer? globalBuf = Rendering.GlobalUniforms.GetBuffer();
             if (globalBuf != null)
                 PropertyApply.BindUniformBuffer(_boundProgram, "GlobalUniforms", globalBuf, 0);
 
@@ -1103,15 +1103,15 @@ internal sealed class CommandExecutor
         // after the draw so the next draw's per-uniform sets get their own slots.
         for (int i = 0; i < _pendingDirectTextures.Count; i++)
         {
-            var (name, tex) = _pendingDirectTextures[i];
+            (string? name, GraphicsTexture? tex) = _pendingDirectTextures[i];
             PropertyApply.BindTexUniform(_boundProgram, name, tex, this);
         }
         _pendingDirectTextures.Clear();
 
         // A sampler nothing bound this draw still holds the unit it had last time, and that unit now
         // holds whatever an earlier draw left there. Point it at an empty unit so it reads nothing.
-        var samplers = _boundProgram.samplers;
-        var boundDraw = _boundProgram.samplerBoundDraw;
+        (int Location, int EmptyUnit)[] samplers = _boundProgram.samplers;
+        int[] boundDraw = _boundProgram.samplerBoundDraw;
         for (int i = 0; i < samplers.Length; i++)
             if (boundDraw[i] != DrawNumber && boundDraw[i] != _prefixDraw)
                 PropertyApply.SetSamplerUnit(_boundProgram, i, samplers[i].EmptyUnit);
@@ -1166,7 +1166,7 @@ internal sealed class CommandExecutor
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static CommandOpcode ReadOpcode(ReadOnlySpan<byte> s, ref int pos)
     {
-        var v = MemoryMarshal.Read<CommandOpcode>(s.Slice(pos));
+        CommandOpcode v = MemoryMarshal.Read<CommandOpcode>(s.Slice(pos));
         pos += sizeof(ushort);
         return v;
     }
@@ -1175,18 +1175,18 @@ internal sealed class CommandExecutor
     private static byte ReadU8(ReadOnlySpan<byte> s, ref int pos) { byte v = s[pos]; pos += 1; return v; }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int ReadI32(ReadOnlySpan<byte> s, ref int pos) { var v = MemoryMarshal.Read<int>(s.Slice(pos)); pos += sizeof(int); return v; }
+    private static int ReadI32(ReadOnlySpan<byte> s, ref int pos) { int v = MemoryMarshal.Read<int>(s.Slice(pos)); pos += sizeof(int); return v; }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint ReadU32(ReadOnlySpan<byte> s, ref int pos) { var v = MemoryMarshal.Read<uint>(s.Slice(pos)); pos += sizeof(uint); return v; }
+    private static uint ReadU32(ReadOnlySpan<byte> s, ref int pos) { uint v = MemoryMarshal.Read<uint>(s.Slice(pos)); pos += sizeof(uint); return v; }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static float ReadF32(ReadOnlySpan<byte> s, ref int pos) { var v = MemoryMarshal.Read<float>(s.Slice(pos)); pos += sizeof(float); return v; }
+    private static float ReadF32(ReadOnlySpan<byte> s, ref int pos) { float v = MemoryMarshal.Read<float>(s.Slice(pos)); pos += sizeof(float); return v; }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static T ReadStruct<T>(ReadOnlySpan<byte> s, ref int pos) where T : unmanaged
     {
-        var v = MemoryMarshal.Read<T>(s.Slice(pos));
+        T v = MemoryMarshal.Read<T>(s.Slice(pos));
         pos += Unsafe.SizeOf<T>();
         return v;
     }
@@ -1194,7 +1194,7 @@ internal sealed class CommandExecutor
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static ReadOnlySpan<T> ReadBlob<T>(ReadOnlySpan<byte> s, ref int pos, TransientStore store) where T : unmanaged
     {
-        var r = ReadStruct<TransientStore.Ref>(s, ref pos);
+        TransientStore.Ref r = ReadStruct<TransientStore.Ref>(s, ref pos);
         return store.Read<T>(r);
     }
 

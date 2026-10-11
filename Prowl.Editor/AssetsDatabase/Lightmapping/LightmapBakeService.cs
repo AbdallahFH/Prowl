@@ -29,10 +29,10 @@ public sealed class LightmapBakeService
     private LightmapBaker? _baker;
     private Job? _job;
     private AutoAtlasResult? _atlas;
-    private readonly List<object> _renderers = new();    // MeshRenderer / SkinnedMeshRenderer, parallel to _atlas placements
-    private readonly Dictionary<Guid, BakeTexture?> _texCache = new(); // diffuse albedo, deduped per texture asset
+    private readonly List<object> _renderers = [];    // MeshRenderer / SkinnedMeshRenderer, parallel to _atlas placements
+    private readonly Dictionary<Guid, BakeTexture?> _texCache = []; // diffuse albedo, deduped per texture asset
     private int _bakeTexCounter;                                       // unique names for Photonic textures (its registry is name-keyed)
-    private List<Float3> _probePositions = new();
+    private List<Float3> _probePositions = [];
     private Scene? _scene;
     private Scene.LightmapBakeSettings _settings = new();
     private int _targetIterations;
@@ -60,7 +60,7 @@ public sealed class LightmapBakeService
         _renderers.Clear();
         _texCache.Clear();
         _bakeTexCounter = 0;
-        _probePositions = new();
+        _probePositions = [];
 
         var baker = new LightmapBaker();
         baker.Options.Bounces = settings.Bounces;
@@ -73,7 +73,7 @@ public sealed class LightmapBakeService
         if (settings.BakeSkyLighting)
             baker.Options.SkyColor = SceneSkyRadiance(scene);
 
-        var bake = baker.BeginScene(scene.Name ?? "Scene");
+        BakeScene bake = baker.BeginScene(scene.Name ?? "Scene");
 
         // --- Gather static renderers. Meshes with a usable lightmap UV (UV2, or UV0 as a fallback)
         // get their own lightmap; the rest are added as occluders so they still cast shadows and
@@ -82,7 +82,7 @@ public sealed class LightmapBakeService
         var occluders = new List<(BakeMesh mesh, Float4x4 transform)>();
         int matCounter = 0;
         int meshKey = 0;
-        foreach (var go in scene.AllObjects)
+        foreach (GameObject go in scene.AllObjects)
         {
             if (!go.IsStatic || !go.EnabledInHierarchy) continue;
 
@@ -93,10 +93,10 @@ public sealed class LightmapBakeService
             else if (go.GetComponent<SkinnedMeshRenderer>() is { } smr) { mesh = smr.SharedMesh; mats = smr.Materials; renderer = smr; }
             else continue;
 
-            if (!TryBuildBakeMesh(bake, mesh, mats, $"r{meshKey++}", ref matCounter, out var bm, out bool hasLightmapUV))
+            if (!TryBuildBakeMesh(bake, mesh, mats, $"r{meshKey++}", ref matCounter, out BakeMesh? bm, out bool hasLightmapUV))
                 continue;
 
-            var xform = go.Transform.LocalToWorldMatrix;
+            Float4x4 xform = go.Transform.LocalToWorldMatrix;
             if (hasLightmapUV) { meshes.Add((bm, xform)); _renderers.Add(renderer); }
             else occluders.Add((bm, xform));
         }
@@ -108,9 +108,9 @@ public sealed class LightmapBakeService
         }
 
         // --- Lights (by bake mode). ---
-        foreach (var go in scene.AllObjects)
+        foreach (GameObject go in scene.AllObjects)
         {
-            var light = go.GetComponent<Light>();
+            Light? light = go.GetComponent<Light>();
             if (light == null || !light.EnabledInHierarchy || light.BakeMode == LightBakeMode.Realtime) continue;
             AddLight(bake, light);
         }
@@ -121,14 +121,14 @@ public sealed class LightmapBakeService
         // --- Occluders: present in the ray-traced scene (shadows + colour bounce) but never written
         // into an atlas page. ReceivesLighting=false keeps them out of rasterization. ---
         if (_atlas.Targets.Length > 0)
-            foreach (var target in _atlas.Targets)
-                foreach (var (om, ox) in occluders)
+            foreach (LightmapTarget target in _atlas.Targets)
+                foreach ((BakeMesh? om, Float4x4 ox) in occluders)
                     target.AddBakeInstance(om, ox).ReceivesLighting = false;
 
         // --- Probes. ---
-        foreach (var go in scene.AllObjects)
+        foreach (GameObject go in scene.AllObjects)
         {
-            var grp = go.GetComponent<LightProbeGroup>();
+            LightProbeGroup? grp = go.GetComponent<LightProbeGroup>();
             if (grp != null && grp.EnabledInHierarchy) _probePositions.AddRange(grp.GetWorldPositions());
         }
 
@@ -169,9 +169,9 @@ public sealed class LightmapBakeService
             if (!_statsReported)
             {
                 long covered = 0, total = 0;
-                foreach (var t in _atlas.Targets)
+                foreach (LightmapTarget t in _atlas.Targets)
                 {
-                    var cov = t.Coverage;
+                    ReadOnlySpan<byte> cov = t.Coverage;
                     for (int i = 0; i < cov.Length; i++) if (cov[i] != 0) covered++;
                     total += (long)t.Width * t.Height;
                 }
@@ -235,7 +235,7 @@ public sealed class LightmapBakeService
     /// <summary>Scene ambient colour as a flat sky radiance (used as ray-miss GI when sky baking is on).</summary>
     private static Float3 SceneSkyRadiance(Scene scene)
     {
-        var a = scene.Ambient;
+        Scene.AmbientLightParams a = scene.Ambient;
         Float4 c = a.Mode == Scene.AmbientLightParams.AmbientMode.Hemisphere ? a.SkyColor : a.Color;
         return new Float3((float)c.X, (float)c.Y, (float)c.Z) * a.Strength;
     }
@@ -243,13 +243,13 @@ public sealed class LightmapBakeService
     private void FinalizeBake()
     {
         Status = "Writing lightmaps…";
-        var baker = _baker!;
-        var atlas = _atlas!;
-        var scene = _scene!;
+        LightmapBaker baker = _baker!;
+        AutoAtlasResult atlas = _atlas!;
+        Scene scene = _scene!;
         baker.Cancel();        // stop the progressive job
         baker.Job?.Wait();     // ensure the worker stopped writing before we read the atlas buffers
 
-        var db = EditorAssetBackend.Instance;
+        EditorAssetBackend? db = EditorAssetBackend.Instance;
         string scenePath = EditorSceneManager.CurrentScenePath ?? "";
         if (db == null || string.IsNullOrEmpty(scenePath))
         {
@@ -272,7 +272,7 @@ public sealed class LightmapBakeService
         var lightmaps = new List<Texture2D>();
         for (int i = 0; i < atlas.Targets.Length; i++)
         {
-            var t = atlas.Targets[i];
+            LightmapTarget t = atlas.Targets[i];
             byte[] rgba = t.ReadRGBM(8f);
             string rel = $"{lmFolderRel}/Lightmap-{i}.png";
             WritePng(Path.Combine(lmFolderAbs, $"Lightmap-{i}.png"), rgba, t.Width, t.Height);
@@ -298,7 +298,7 @@ public sealed class LightmapBakeService
             GameObject owner = renderer.GameObject;
             if (owner.IsNotValid()) continue;
 
-            var inst = atlas.Instances[i];
+            BakeInstance inst = atlas.Instances[i];
             scene.BakedLighting.Placements[owner.Identifier] = new Scene.LightmapPlacement
             {
                 Index = atlas.Placements[i].AtlasIndex,
@@ -313,9 +313,9 @@ public sealed class LightmapBakeService
             Sh9Rgb[] sh = baker.BakeProbes(_probePositions, _settings.ProbeSamples, _settings.Bounces);
             var runtimeSH = new SphericalHarmonicsL2[sh.Length];
             for (int i = 0; i < sh.Length; i++) runtimeSH[i] = ConvertSH(sh[i]);
-            var tet = ProbeTetrahedralizer.Build(_probePositions);
+            ProbeTetrahedralizer.Result tet = ProbeTetrahedralizer.Build(_probePositions);
 
-            scene.BakedLighting.ProbePositions = _probePositions.ToArray();
+            scene.BakedLighting.ProbePositions = [.. _probePositions];
             scene.BakedLighting.ProbeSH = runtimeSH;
             scene.BakedLighting.ProbeTetrahedra = tet.Tetrahedra;
             scene.BakedLighting.ProbeTetNeighbours = tet.Neighbours;
@@ -364,7 +364,7 @@ public sealed class LightmapBakeService
         Float2[] uv0 = mesh.HasUV ? mesh.UV : (lmUV ?? new Float2[mesh.VertexCount]);
         Float2[] uv1 = lmUV ?? new Float2[mesh.VertexCount];
 
-        var builder = bake.BeginMesh($"{nameKey}_{mesh.Name}")
+        BakeMesh.Builder builder = bake.BeginMesh($"{nameKey}_{mesh.Name}")
             .AddVertices(mesh.Vertices, mesh.Normals)
             .AddUVLayer("UV0", uv0)
             .AddUVLayer("UV1", uv1);
@@ -374,28 +374,28 @@ public sealed class LightmapBakeService
 
         for (int s = 0; s < subCount; s++)
         {
-            var sub = mesh.GetSubMesh(s);
+            SubMeshDescriptor sub = mesh.GetSubMesh(s);
             int start = sub.IndexStart, count = sub.IndexCount;
             if (count <= 0) continue;
-            var groupIdx = new int[count];
+            int[] groupIdx = new int[count];
             for (int k = 0; k < count; k++) groupIdx[k] = (int)indices[start + k];
 
             // One BakeMaterial per (renderer, submesh) with the Prowl material's base colour.
             string matName = $"m{matCounter++}";
-            var bmat = bake.CreateMaterial(matName);
-            var materialsSpan = CollectionsMarshal.AsSpan(materials);
-            var pm = (s < materialsSpan.Length ? materialsSpan[s] : (materialsSpan.Length > 0 ? materialsSpan[^1] : default));
+            BakeMaterial bmat = bake.CreateMaterial(matName);
+            Span<Material> materialsSpan = CollectionsMarshal.AsSpan(materials);
+            Material? pm = (s < materialsSpan.Length ? materialsSpan[s] : (materialsSpan.Length > 0 ? materialsSpan[^1] : default));
             if (pm != null)
             {
-                var c = pm._properties.GetColor("_MainColor");
+                Color c = pm._properties.GetColor("_MainColor");
                 bmat.DiffuseColor = new Float3((float)c.R, (float)c.G, (float)c.B);
 
                 // Feed the diffuse albedo texture so bounced light picks up its colour.
-                var tex = pm._properties.GetTexture("_MainTex");
+                Texture2D? tex = pm._properties.GetTexture("_MainTex");
                 if (tex is not null) tex.Load();
                 if (tex is { IsLoaded: true })
                 {
-                    var bt = GetOrCreateDiffuse(bake, tex);
+                    BakeTexture? bt = GetOrCreateDiffuse(bake, tex);
                     if (bt != null)
                     {
                         bmat.DiffuseTexture = bt;
@@ -414,7 +414,7 @@ public sealed class LightmapBakeService
     private BakeTexture? GetOrCreateDiffuse(BakeScene bake, Texture2D tex)
     {
         Guid key = tex.AssetID;
-        if (key != Guid.Empty && _texCache.TryGetValue(key, out var cached)) return cached;
+        if (key != Guid.Empty && _texCache.TryGetValue(key, out BakeTexture? cached)) return cached;
 
         // Photonic keys textures by name and rejects duplicates, so give each one a unique name
         // (Texture2D names aren't unique many default to "New Texture").
@@ -452,7 +452,7 @@ public sealed class LightmapBakeService
         int w = (int)tex.Width, h = (int)tex.Height;
         if (w <= 0 || h <= 0) return null;
         int n = w * h;
-        var rgba = new byte[n * 4];
+        byte[] rgba = new byte[n * 4];
         try
         {
             if (tex.ImageFormat == TextureImageFormat.Color4b)
@@ -461,7 +461,7 @@ public sealed class LightmapBakeService
             }
             else if (tex.ImageFormat is TextureImageFormat.UnsignedShort4 or TextureImageFormat.Short4)
             {
-                var tmp = new ushort[n * 4];
+                ushort[] tmp = new ushort[n * 4];
                 tex.GetData<ushort>(tmp);
                 for (int i = 0; i < n * 4; i++) rgba[i] = (byte)(tmp[i] >> 8);
             }
@@ -473,7 +473,7 @@ public sealed class LightmapBakeService
 
     private static void AddLight(BakeScene bake, Light light)
     {
-        var c = light.Color;
+        Color c = light.Color;
         // Match the realtime shader's radiance convention (Lighting.glsl): radiance = Color * (Intensity * 8).
         Float3 color = new Float3((float)c.R, (float)c.G, (float)c.B) * (light.Intensity * 8.0f);
         Float4x4 xform = light.Transform.LocalToWorldMatrix;
@@ -487,7 +487,7 @@ public sealed class LightmapBakeService
                 {
                     // Prowl's SpotAngle/InnerSpotAngle are OUTER/INNER half-angles in degrees; Photonic's
                     // ConeAngle/InnerConeAngle are FULL cone angles in radians (it halves them internally).
-                    var spot = bake.CreateSpotLight(light.GameObject.Name, xform, color, sl.Range, 2.0f * sl.SpotAngle * Maths.Deg2Rad);
+                    Photonic.Scene.Lights.SpotLight spot = bake.CreateSpotLight(light.GameObject.Name, xform, color, sl.Range, 2.0f * sl.SpotAngle * Maths.Deg2Rad);
                     spot.InnerConeAngle = 2.0f * sl.InnerSpotAngle * Maths.Deg2Rad;
                     bl = spot;
                     break;

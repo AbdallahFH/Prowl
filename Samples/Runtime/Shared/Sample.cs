@@ -18,10 +18,13 @@ using Prowl.PaperUI;
 using Prowl.PaperUI.Events;
 using Prowl.PaperUI.LayoutEngine;
 using Prowl.Runtime;
+using Prowl.Runtime.ParticleSystem;
 using Prowl.Runtime.Rendering;
 using Prowl.Runtime.Resources;
 using Prowl.Scribe;
 using Prowl.Vector;
+
+using Silk.NET.Maths;
 
 using Gradient = Prowl.Vector.Gradient;
 using MouseButton = Prowl.Runtime.MouseButton;
@@ -37,7 +40,7 @@ public abstract class StationGame : Game
     protected GameObject CameraObject = null!;
     protected Camera MainCamera = null!;
     protected SampleHud Hud = null!;
-    public readonly List<Station> Stations = new();
+    public readonly List<Station> Stations = [];
     public int CurrentStation { get; private set; }
 
     /// <summary>Key help for moving around, shown after the station keys.</summary>
@@ -178,7 +181,7 @@ public abstract class StationGame : Game
     {
         uint seed = 1;
         foreach (GameObject go in SampleScene.AllObjects)
-            foreach (var particles in go.GetComponents<Prowl.Runtime.ParticleSystem.ParticleSystemComponent>())
+            foreach (ParticleSystemComponent particles in go.GetComponents<Prowl.Runtime.ParticleSystem.ParticleSystemComponent>())
             {
                 particles.AutoRandomSeed = false;
                 particles.RandomSeed = seed++;
@@ -281,7 +284,7 @@ public abstract class StationGame : Game
         shot.Dispose();
 
         // PNG rows are top first and each starts with a filter byte, the texture is bottom first.
-        var raw = new byte[height * (width * 3 + 1)];
+        byte[] raw = new byte[height * (width * 3 + 1)];
         for (int y = 0; y < height; y++)
         {
             int row = y * (width * 3 + 1);
@@ -299,9 +302,9 @@ public abstract class StationGame : Game
         using (var zlib = new ZLibStream(compressed, CompressionLevel.Fastest, true))
             zlib.Write(raw);
 
-        using var stream = File.Create(file);
+        using FileStream stream = File.Create(file);
         stream.Write([137, 80, 78, 71, 13, 10, 26, 10]);
-        var header = new byte[13];
+        byte[] header = new byte[13];
         WriteBigEndian(header, 0, (uint)width);
         WriteBigEndian(header, 4, (uint)height);
         header[8] = 8;
@@ -313,7 +316,7 @@ public abstract class StationGame : Game
 
     private static void WriteChunk(Stream stream, string type, byte[] data)
     {
-        var buffer = new byte[4];
+        byte[] buffer = new byte[4];
         WriteBigEndian(buffer, 0, (uint)data.Length);
         stream.Write(buffer);
         byte[] typeBytes = System.Text.Encoding.ASCII.GetBytes(type);
@@ -512,9 +515,9 @@ public sealed class ChaseCamera : Component
 /// <summary>Collects quads for a procedural mesh, winding each one to face the given direction.</summary>
 public sealed class MeshBuilder
 {
-    private readonly List<Float3> _vertices = new();
-    private readonly List<Float2> _uvs = new();
-    private readonly List<uint> _indices = new();
+    private readonly List<Float3> _vertices = [];
+    private readonly List<Float2> _uvs = [];
+    private readonly List<uint> _indices = [];
 
     public void Quad(Float3 a, Float3 b, Float3 c, Float3 d, Float2 ua, Float2 ub, Float2 uc, Float2 ud, Float3 facing)
     {
@@ -529,7 +532,7 @@ public sealed class MeshBuilder
 
     public Mesh Build()
     {
-        var mesh = new Mesh { Vertices = _vertices.ToArray(), UV = _uvs.ToArray(), Indices = _indices.ToArray() };
+        var mesh = new Mesh { Vertices = [.. _vertices], UV = [.. _uvs], Indices = [.. _indices] };
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
         mesh.RecalculateTangents();
@@ -574,7 +577,7 @@ public sealed class PhysicsGrabber : Component
     {
         if (_line == null) CreateLine();
         Camera camera = GetComponent<Camera>()!;
-        var size = Window.InternalWindow.Size;
+        Vector2D<int> size = Window.InternalWindow.Size;
         Ray ray = camera.ScreenPointToRay(new Float2(Input.MousePosition.X, Input.MousePosition.Y), new Float2(size.X, size.Y));
 
         bool overUi = Game.PaperInstance != null && Game.PaperInstance.WantsCapturePointer;
@@ -926,7 +929,7 @@ public static class Sample
     public static GameObject Model(string name, Mesh mesh, Material material, Float3 position, Float3? euler = null, Float3? scale = null)
     {
         var go = new GameObject(name);
-        var renderer = go.AddComponent<MeshRenderer>();
+        MeshRenderer renderer = go.AddComponent<MeshRenderer>();
         renderer.Mesh = mesh;
         renderer.Material = material;
         go.Transform.Position = position;
@@ -962,7 +965,7 @@ public static class Sample
     // ----------------------------------------------------------------
 
     public static AnimationCurve Curve(params (float time, float value)[] keys)
-        => new(keys.Select(k => new Keyframe(k.time, k.value)).ToArray());
+        => new([.. keys.Select(k => new Keyframe(k.time, k.value))]);
 
     public static Gradient Grad((float time, Color color)[] colors, (float time, float alpha)[] alphas)
         => new(colors.Select(k => new GradientColorKey(k.time, k.color)), alphas.Select(k => new GradientAlphaKey(k.time, k.alpha)));

@@ -36,15 +36,15 @@ public sealed class SceneLightSystem : IDisposable
 
     // Per-frame results.
     private IRenderableLight _directional;
-    private readonly List<IRenderableLight> _extraDirectionals = new();
-    private readonly List<Light> _shadowLights = new();
+    private readonly List<IRenderableLight> _extraDirectionals = [];
+    private readonly List<Light> _shadowLights = [];
     private readonly HashSet<Light> _shadowLightSet = new(ReferenceEqualityComparer.Instance);
 
     // Every shadow casting point and spot light holds a block id for as long as it casts, the same for every camera,
     // so the light's record can point at it while each camera fills the block with its own shadow data
     private readonly Dictionary<Light, int> _shadowIds = new(ReferenceEqualityComparer.Instance);
     private readonly Stack<int> _freeShadowIds = new();
-    private readonly List<Light> _releasedShadowIds = new();
+    private readonly List<Light> _releasedShadowIds = [];
     private readonly Func<Light, int> _shadowIdOf;
     private int _nextShadowId;
 
@@ -78,6 +78,9 @@ public sealed class SceneLightSystem : IDisposable
     /// scene affects every camera. The argument is kept for forward compatibility.
     /// </para>
     /// </summary>
+    /// <param name="lights">All lights in the scene.</param>
+    /// <param name="cameraPosition">The camera position, unused for now.</param>
+    /// <param name="cullingMask">The camera layer mask, unused for now.</param>
     /// <param name="view">The view moving lights are culled to, or null to keep them all, as both eyes of a headset need.</param>
     public void Reconcile(IReadOnlyList<IRenderableLight> lights, Float3 cameraPosition, LayerMask cullingMask, Frustum? view = null)
     {
@@ -90,7 +93,7 @@ public sealed class SceneLightSystem : IDisposable
 
         for (int i = 0; i < lights.Count; i++)
         {
-            var light = lights[i];
+            IRenderableLight light = lights[i];
             if (light == null) continue;
 
             // Fully-baked lights live entirely in the lightmap + probes excluded from the realtime
@@ -138,7 +141,7 @@ public sealed class SceneLightSystem : IDisposable
         _directional = _extraDirectionals[main];
         _extraDirectionals.RemoveAt(main);
 
-        foreach (var extra in _extraDirectionals)
+        foreach (IRenderableLight extra in _extraDirectionals)
         {
             if (extra.DoCastShadows())
             {
@@ -213,7 +216,7 @@ public sealed class SceneLightSystem : IDisposable
     internal void UploadGlobalUniforms(in ShadowFitView view, ShadowRenderer shadows)
     {
         // Encoded into one buffer and submitted once, rather than a buffer per global
-        using var cmd = Graphics.GetCommandBuffer("LightUniforms");
+        using CommandBuffer cmd = Graphics.GetCommandBuffer("LightUniforms");
         _trees.Upload(cmd);
         UploadDirectionalLight(cmd, view, shadows);
         UploadLocalShadows(cmd, shadows);
@@ -228,7 +231,7 @@ public sealed class SceneLightSystem : IDisposable
         cmd.SetGlobalInt("_ExtraDirectionalLightCount", _extraDirectionals.Count);
         for (int i = 0; i < _extraDirectionals.Count; i++)
         {
-            var extra = _extraDirectionals[i].GetForwardLightData();
+            ForwardLightData extra = _extraDirectionals[i].GetForwardLightData();
             cmd.SetGlobalVector($"_ExtraDirectionalLightDirection[{i}]", extra.Direction);
             cmd.SetGlobalVector($"_ExtraDirectionalLightColor[{i}]", extra.Color * extra.Intensity);
         }
@@ -244,7 +247,7 @@ public sealed class SceneLightSystem : IDisposable
             return;
         }
 
-        var data = _directional.GetForwardLightData();
+        ForwardLightData data = _directional.GetForwardLightData();
         // Direct lighting wants the raw direction; intensity applies the same * 8 scaling the
         // legacy ForwardLightManager did so existing scenes look identical at low light counts.
         cmd.SetGlobalInt("_DirectionalLightEnabled", 1);

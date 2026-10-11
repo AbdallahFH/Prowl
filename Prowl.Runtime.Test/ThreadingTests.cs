@@ -11,6 +11,10 @@ using Prowl.Vector;
 
 using Xunit;
 
+// These tests treat the test thread as the engine's main thread, so they block on workers rather than await,
+// which could resume on another thread.
+#pragma warning disable xUnit1031
+
 namespace Prowl.Runtime.Test;
 
 /// <summary>Stands in for a user script that overrides OnDispose without calling base.</summary>
@@ -22,7 +26,9 @@ public sealed class ForgetsBaseDispose : Component
 /// <summary>Runs whatever a test hands it from inside Update, the way gameplay code starts work.</summary>
 public sealed class GameplayHook : Component
 {
+#pragma warning disable CA2211 // Non-constant fields should not be visible
     public static Action? OnUpdate;
+#pragma warning restore CA2211 // Non-constant fields should not be visible
 
     public override void Update() => OnUpdate?.Invoke();
 }
@@ -58,7 +64,9 @@ public class ThreadingTests : RuntimeTestBase
 
         public LoopScope() => MainThreadContext.Install();
 
+#pragma warning disable CA1822 // Mark members as static
         public MainThreadContext Context => MainThreadContext.Current!;
+#pragma warning restore CA1822 // Mark members as static
 
         public void Pump() => Context.Pump();
 
@@ -129,7 +137,7 @@ public class ThreadingTests : RuntimeTestBase
             frames++;
         }
 
-        Wait();
+        _ = Wait();
         loop.Pump();
         Assert.Equal(1, frames);
         loop.Pump();
@@ -170,7 +178,7 @@ public class ThreadingTests : RuntimeTestBase
             ran = true;
         }
 
-        Stay();
+        _ = Stay();
         Assert.True(ran);
     }
 
@@ -250,7 +258,7 @@ public class ThreadingTests : RuntimeTestBase
             resumed = true;
         }
 
-        Play();
+        _ = Play();
         MainThreadContext.Restart();
         slow.SetResult();
 
@@ -298,7 +306,7 @@ public class ThreadingTests : RuntimeTestBase
     {
         using var loop = new LoopScope();
 
-        Task<Exception?> worker = Task.Run(() => Record.Exception(() => GameTask.Run(() => throw new FormatException("boom"))));
+        Task<Exception?> worker = Task.Run<Exception?>(() => Record.Exception(() => GameTask.Run(() => throw new FormatException("boom"))));
         loop.PumpUntil(() => worker.IsCompleted);
 
         Assert.IsType<FormatException>(worker.Result);
@@ -361,7 +369,7 @@ public class ThreadingTests : RuntimeTestBase
             applied = true;
         }
 
-        using (MainThreadContext.EnterSession()) Work();
+        using (MainThreadContext.EnterSession()) _ = Work();
         Assert.True(computing.Wait(5000));
         MainThreadContext.Restart();
         release.Set();
@@ -425,7 +433,7 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void WorkStartedFromAComponentStaysBoundToItsSession()
     {
-        var (scene, go) = LiveObject();
+        (Scene? scene, GameObject? go) = LiveObject();
         go.AddComponent<GameplayHook>();
         using var loop = new LoopScope();
         var release = new ManualResetEventSlim(false);
@@ -485,7 +493,7 @@ public class ThreadingTests : RuntimeTestBase
             MainThreadContext.Restart();
         }
 
-        Restarter();
+        _ = Restarter();
         loop.Pump();
         Assert.Same(MainThreadContext.Current, SynchronizationContext.Current);
 
@@ -496,7 +504,7 @@ public class ThreadingTests : RuntimeTestBase
             resumed = true;
         }
 
-        After();
+        _ = After();
         loop.Pump();
         loop.Pump();
         Assert.True(resumed);
@@ -508,7 +516,7 @@ public class ThreadingTests : RuntimeTestBase
     {
         using var loop = new LoopScope();
 
-        async Task RestartThenReturn()
+        static async Task RestartThenReturn()
         {
             MainThreadContext.Restart();
             await Task.CompletedTask;
@@ -524,7 +532,7 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void AfterTheLoopStopsWorkersAreRefusedUntilItIsUninstalled()
     {
-        var (_, go) = LiveObject();
+        (Scene _, GameObject? go) = LiveObject();
         using var loop = new LoopScope();
         MainThreadContext.Stop();
         bool ran = false, posted = false;
@@ -569,7 +577,7 @@ public class ThreadingTests : RuntimeTestBase
     {
         using var loop = new LoopScope();
         var errors = new List<string>();
-        OnLog capture = (message, _, severity) => { if (severity == LogSeverity.Error) lock (errors) errors.Add(message); };
+        void capture(string message, DebugStackTrace? _, LogSeverity severity) { if (severity == LogSeverity.Error) lock (errors) errors.Add(message); }
         Debug.OnLog += capture;
         try
         {
@@ -661,7 +669,7 @@ public class ThreadingTests : RuntimeTestBase
         using var loop = new LoopScope();
         var slow = new TaskCompletionSource();
         string? logged = null;
-        OnLog capture = (message, _, severity) => { if (severity == LogSeverity.Error && message.Contains("late failure")) logged = message; };
+        void capture(string message, DebugStackTrace? _, LogSeverity severity) { if (severity == LogSeverity.Error && message.Contains("late failure")) logged = message; }
         Debug.OnLog += capture;
         try
         {
@@ -732,7 +740,7 @@ public class ThreadingTests : RuntimeTestBase
         Scene first = CreateScene();
         GameObject oldObject = CreateGameObject("Old");
         first.Add(oldObject);
-        var outgoing = oldObject.AddComponent<SessionProbe>();
+        SessionProbe outgoing = oldObject.AddComponent<SessionProbe>();
         Scene.Load(first);
         Scene.ProcessPendingLoad();
         CancellationToken firstSession = GameTask.SessionToken;
@@ -740,7 +748,7 @@ public class ThreadingTests : RuntimeTestBase
         Scene second = CreateScene();
         GameObject newObject = CreateGameObject("New");
         second.Add(newObject);
-        var incoming = newObject.AddComponent<SessionProbe>();
+        SessionProbe incoming = newObject.AddComponent<SessionProbe>();
         Scene.EndSessionOnSwap = true;
         Scene.Load(second);
         Scene.ProcessPendingLoad();
@@ -774,8 +782,8 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void DisposingALiveComponentFromAnotherThreadThrowsBeforeTearingAnythingDown()
     {
-        var (_, go) = LiveObject();
-        var listener = go.AddComponent<PhysicsListener>();
+        (Scene _, GameObject? go) = LiveObject();
+        PhysicsListener listener = go.AddComponent<PhysicsListener>();
         CancellationToken token = listener.DestroyCancellationToken;
         using var loop = new LoopScope();
 
@@ -789,11 +797,11 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void DisposingALiveObjectFromAnotherThreadThrowsBeforeTearingAnythingDown()
     {
-        var (scene, root) = LiveObject();
+        (Scene? scene, GameObject? root) = LiveObject();
         GameObject child = CreateGameObject("Child");
         scene.Add(child);
         child.SetParent(root);
-        var listener = child.AddComponent<PhysicsListener>();
+        PhysicsListener listener = child.AddComponent<PhysicsListener>();
         using var loop = new LoopScope();
 
         Assert.Throws<InvalidOperationException>(() => OffThread(child.Dispose));
@@ -808,7 +816,7 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void DisposingALiveSceneFromAnotherThreadThrows()
     {
-        var (scene, _) = LiveObject();
+        (Scene? scene, GameObject _) = LiveObject();
         using var loop = new LoopScope();
 
         Assert.Throws<InvalidOperationException>(() => OffThread(scene.Dispose));
@@ -831,10 +839,10 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void PhysicsAndAnimationComponentsOnALiveObjectAreChecked()
     {
-        var (_, go) = LiveObject();
-        var body = go.AddComponent<Rigidbody3D>();
-        var box = go.AddComponent<BoxCollider>();
-        var animator = go.AddComponent<Animator>();
+        (Scene _, GameObject? go) = LiveObject();
+        Rigidbody3D body = go.AddComponent<Rigidbody3D>();
+        BoxCollider box = go.AddComponent<BoxCollider>();
+        Animator animator = go.AddComponent<Animator>();
         float mass = body.Mass;
         using var loop = new LoopScope();
 
@@ -852,10 +860,10 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void MovingALiveObjectFromAnotherThreadThrowsAndChangesNothing()
     {
-        var (_, go) = LiveObject();
+        (Scene _, GameObject? go) = LiveObject();
         using var loop = new LoopScope();
 
-        var error = Assert.Throws<InvalidOperationException>(() => OffThread(() => go.Transform.Position = new Float3(5, 0, 0)));
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => OffThread(() => go.Transform.Position = new Float3(5, 0, 0)));
 
         Assert.Contains("Position", error.Message);
         Assert.Equal(Float3.Zero, go.Transform.Position);
@@ -864,7 +872,7 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void EveryStructuralChangeToALiveSceneIsChecked()
     {
-        var (scene, go) = LiveObject();
+        (Scene? scene, GameObject? go) = LiveObject();
         GameObject other = CreateGameObject("Other");
         scene.Add(other);
         GameObject loose = CreateGameObject("Loose");
@@ -891,8 +899,8 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void AComponentOnALiveObjectCannotBeToggledFromAnotherThread()
     {
-        var (_, go) = LiveObject();
-        var listener = go.AddComponent<PhysicsListener>();
+        (Scene _, GameObject? go) = LiveObject();
+        PhysicsListener listener = go.AddComponent<PhysicsListener>();
         using var loop = new LoopScope();
 
         Assert.Throws<InvalidOperationException>(() => OffThread(() => listener.Enabled = false));
@@ -927,7 +935,7 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void DestroyFromAnotherThreadIsQueuedForTheMainThread()
     {
-        var (_, go) = LiveObject();
+        (Scene _, GameObject? go) = LiveObject();
         using var loop = new LoopScope();
 
         OffThread(go.Destroy);
@@ -940,7 +948,7 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void ReadingWorldTransformsFromAnotherThreadGivesTheRightAnswer()
     {
-        var (scene, parent) = LiveObject();
+        (Scene? scene, GameObject? parent) = LiveObject();
         GameObject child = CreateGameObject("Child");
         scene.Add(child);
         child.SetParent(parent);
@@ -967,20 +975,20 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void PhysicsQueriesFromAnotherThreadThrow()
     {
-        var (scene, _) = LiveObject();
+        (Scene? scene, GameObject _) = LiveObject();
         using var loop = new LoopScope();
         var hits = new List<RaycastHit>();
 
         Assert.Throws<InvalidOperationException>(() => OffThread(() => scene.Physics.RaycastAll(Float3.Zero, Float3.UnitY, 10, hits)));
         Assert.Throws<InvalidOperationException>(() => OffThread(() => scene.Physics.Raycast(Float3.Zero, Float3.UnitY, 10)));
-        Assert.Throws<InvalidOperationException>(() => OffThread(() => scene.Physics.OverlapSphere(Float3.Zero, 1, new List<ShapeCastHit>())));
+        Assert.Throws<InvalidOperationException>(() => OffThread(() => scene.Physics.OverlapSphere(Float3.Zero, 1, [])));
         Assert.Equal(0, scene.Physics.RaycastAll(Float3.Zero, Float3.UnitY, 10, hits));
     }
 
     [Fact]
     public void WithoutALoopOtherThreadsAreNotStopped()
     {
-        var (_, go) = LiveObject();
+        (Scene _, GameObject? go) = LiveObject();
 
         OffThread(() => go.Transform.Position = new Float3(3, 0, 0));
 
@@ -992,8 +1000,8 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void DestroyCancellationTokenCancelsWhenTheComponentIsDestroyed()
     {
-        var (_, go) = LiveObject();
-        var listener = go.AddComponent<PhysicsListener>();
+        (Scene _, GameObject? go) = LiveObject();
+        PhysicsListener listener = go.AddComponent<PhysicsListener>();
         CancellationToken token = listener.DestroyCancellationToken;
 
         listener.Destroy();
@@ -1007,7 +1015,7 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void DestroyCancellationTokenCancelsWithItsGameObject()
     {
-        var (_, go) = LiveObject();
+        (Scene _, GameObject? go) = LiveObject();
         CancellationToken token = go.AddComponent<PhysicsListener>().DestroyCancellationToken;
 
         go.Dispose();
@@ -1018,8 +1026,8 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void DestroyCancellationTokenCancelsEvenWhenOnDisposeSkipsBase()
     {
-        var (_, go) = LiveObject();
-        var careless = go.AddComponent<ForgetsBaseDispose>();
+        (Scene _, GameObject? go) = LiveObject();
+        ForgetsBaseDispose careless = go.AddComponent<ForgetsBaseDispose>();
         CancellationToken token = careless.DestroyCancellationToken;
 
         careless.Dispose();
@@ -1032,11 +1040,11 @@ public class ThreadingTests : RuntimeTestBase
     [Fact]
     public void ReadingTimeFromAnotherThreadWhileTheLoopSwapsItNeverThrows()
     {
-        TimeData[] saved = Time.TimeStack.ToArray();
+        TimeData[] saved = [.. Time.TimeStack];
         var frame = new TimeData { DeltaTime = 0.5f };
         using var stop = new CancellationTokenSource();
 
-        Task<Exception?> reader = Task.Run(() => Record.Exception(() =>
+        Task<Exception?> reader = Task.Run<Exception?>(() => Record.Exception(() =>
         {
             while (!stop.IsCancellationRequested)
             {

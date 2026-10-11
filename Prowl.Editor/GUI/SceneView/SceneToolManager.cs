@@ -40,9 +40,9 @@ public sealed class SceneToolEntry
 /// </summary>
 public static class SceneToolManager
 {
-    private static readonly List<SceneToolEntry> _entries = new();
-    private static readonly List<SceneTool> _live = new();
-    private static readonly List<SceneTool> _scratch = new();
+    private static readonly List<SceneToolEntry> _entries = [];
+    private static readonly List<SceneTool> _live = [];
+    private static readonly List<SceneTool> _scratch = [];
 
     /// <summary>Every registered tool, in strip order.</summary>
     public static IReadOnlyList<SceneToolEntry> All => _entries;
@@ -81,7 +81,7 @@ public static class SceneToolManager
     internal static void SyncAvailability(SceneToolContext ctx)
     {
         _scratch.Clear();
-        foreach (var entry in _entries)
+        foreach (SceneToolEntry entry in _entries)
         {
             if (entry.ComponentType != null && !SelectionHasComponent(entry.ComponentType)) continue;
 
@@ -148,7 +148,7 @@ public static class SceneToolManager
 
     private static bool SelectionHasComponent(Type componentType)
     {
-        var go = Selection.GetSelected<GameObject>().FirstOrDefault();
+        GameObject? go = Selection.GetSelected<GameObject>().FirstOrDefault();
         return go.IsValid() && go.GetComponent(componentType) != null;
     }
 
@@ -164,13 +164,13 @@ public static class SceneToolManager
     public static T Settings<T>() where T : class, new()
     {
         string key = typeof(T).FullName ?? typeof(T).Name;
-        var store = EditorSettings.Instance.SceneToolSettings;
+        Dictionary<string, string> store = EditorSettings.Instance.SceneToolSettings;
 
         if (store.TryGetValue(key, out string? json) && !string.IsNullOrEmpty(json))
         {
             try
             {
-                var loaded = System.Text.Json.JsonSerializer.Deserialize<T>(json);
+                T? loaded = System.Text.Json.JsonSerializer.Deserialize<T>(json);
                 if (loaded != null) return loaded;
             }
             catch (Exception ex)

@@ -22,7 +22,7 @@ public class MissingComponent : Component, ISerializable
 
     // Live objects the $id and $extern nodes in ComponentData resolved to, keyed by $id, or by the
     // negative walk index of a $extern node.
-    private Dictionary<int, object> _references = new();
+    private Dictionary<int, object> _references = [];
 
     public void Serialize(ref EchoObject compound, SerializationContext ctx)
     {
@@ -49,6 +49,8 @@ public class MissingComponent : Component, ISerializable
             compound.Remove("_prefabTemplateIdentity");
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026:RequiresUnreferencedCode",
+        Justification = "Serialized and user types are resolved by name, and the application's trim configuration must preserve them.")]
     public void Deserialize(EchoObject value, SerializationContext ctx)
     {
         _references.Clear();
@@ -69,7 +71,7 @@ public class MissingComponent : Component, ISerializable
             {
                 if (!ctx.unresolvedDefinitions.TryGetValue(id, out EchoObject? definition)) return;
                 Load(definition, definition, ctx);
-                LoadedIdentifier = Identifier;
+                _loadedIdentifier = Identifier;
                 if (!GameObject.PreservingIdentifiers)
                     Identifier = Guid.NewGuid();
                 CaptureReferences(ctx);

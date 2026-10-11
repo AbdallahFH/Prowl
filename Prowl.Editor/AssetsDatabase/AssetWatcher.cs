@@ -27,7 +27,7 @@ public class AssetWatcher : IDisposable
 {
     private FileSystemWatcher? _watcher;
     private readonly object _lock = new();
-    private readonly List<FileEvent> _pendingEvents = new();
+    private readonly List<FileEvent> _pendingEvents = [];
     private DateTime _lastEventTime = DateTime.MinValue;
     private const double DebounceMs = 300;
 
@@ -91,11 +91,11 @@ public class AssetWatcher : IDisposable
     {
         lock (_lock)
         {
-            if (_pendingEvents.Count == 0) return new List<FileEvent>();
+            if (_pendingEvents.Count == 0) return [];
 
             // Wait for debounce period
             if (!force && (DateTime.UtcNow - _lastEventTime).TotalMilliseconds < DebounceMs)
-                return new List<FileEvent>();
+                return [];
 
             // Coalesce: for each path, determine the net effect.
             // Renames are special they track OldPath.
@@ -105,7 +105,7 @@ public class AssetWatcher : IDisposable
             //   - Created+Deleted cancels out.
             var coalesced = new Dictionary<string, FileEvent>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var evt in _pendingEvents)
+            foreach (FileEvent evt in _pendingEvents)
             {
                 // Renames always win they're the most specific
                 if (evt.Type == FileEventType.Renamed)
@@ -117,7 +117,7 @@ public class AssetWatcher : IDisposable
                     continue;
                 }
 
-                if (coalesced.TryGetValue(evt.Path, out var existing))
+                if (coalesced.TryGetValue(evt.Path, out FileEvent existing))
                 {
                     // Created + Deleted = cancel out entirely
                     if (existing.Type == FileEventType.Created && evt.Type == FileEventType.Deleted)
@@ -156,7 +156,7 @@ public class AssetWatcher : IDisposable
             }
 
             _pendingEvents.Clear();
-            return coalesced.Values.ToList();
+            return [.. coalesced.Values];
         }
     }
 

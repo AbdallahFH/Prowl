@@ -14,6 +14,7 @@ using Prowl.PaperUI;
 using Prowl.PaperUI.LayoutEngine;
 using Prowl.Runtime;
 using Prowl.Runtime.Resources;
+using Prowl.Scribe;
 
 namespace Prowl.Editor.Inspector;
 
@@ -36,7 +37,7 @@ public class RenderTextureAssetEditor : AssetImporterEditor
 
     /// <summary>Per asset, so edits survive looking at something else and coming back. Per-instance
     /// state would be one slot that the next selection overwrites.</summary>
-    private static readonly Dictionary<Guid, Description> s_edits = new();
+    private static readonly Dictionary<Guid, Description> s_edits = [];
 
     private Description Edits(AssetEntry entry, RenderTexture rt)
     {
@@ -67,7 +68,7 @@ public class RenderTextureAssetEditor : AssetImporterEditor
 
     public override void OnGUI(Paper paper, string id, AssetEntry entry, EngineObject? asset)
     {
-        var font = EditorTheme.DefaultFont;
+        FontFile? font = EditorTheme.DefaultFont;
         if (font == null || Project.Current == null) return;
         if (asset is not RenderTexture rt) return;
 

@@ -285,7 +285,7 @@ public sealed class AnimationNodeCard
 
     internal readonly record struct Row(float Height, Action<Paper, string> Draw);
 
-    internal readonly List<Row> Rows = new();
+    internal readonly List<Row> Rows = [];
 
     internal AnimationNodeCard(GraphNode widget, GraphNodeRecord record, AnimationNodeEditor editor, AnimationGraphEditing editing)
     {
@@ -385,7 +385,7 @@ public sealed class AnimationNodeCard
             {
                 // Every row keeps its drags to itself, so working a control never drags the node,
                 // while the gaps between rows still pick the card up.
-                var line = ctx.Control(paper.Row(ctx.Id("row" + i)).Width(UnitValue.Stretch()).Height(rows[i].Height)
+                ElementBuilder line = ctx.Control(paper.Row(ctx.Id("row" + i)).Width(UnitValue.Stretch()).Height(rows[i].Height)
                     .Margin(0, 0, 0, Gap).AlignItems(LayoutAlignment.Center));
 
                 using (line.Enter())
@@ -404,7 +404,7 @@ public sealed class AnimationNodeCard
     /// <summary>A label at the start of a row.</summary>
     public static void Label(Paper paper, string id, string text)
     {
-        var font = EditorTheme.DefaultFont;
+        Scribe.FontFile? font = EditorTheme.DefaultFont;
         if (font == null) return;
 
         paper.Box(id).Width(LabelWidth).Height(UnitValue.Stretch()).IsNotInteractable()
@@ -447,13 +447,13 @@ public sealed class AnimationNodeCard
         switch (setting.Kind)
         {
             case NodeValueKind.Number:
-                var number = Origami.NumericField<float>(paper, id, value.Number, v => editing.Edit(edit, () => value.Number = v, false));
+                NumericFieldBuilder<float> number = Origami.NumericField<float>(paper, id, value.Number, v => editing.Edit(edit, () => value.Number = v, false));
                 if (dragLabel != null) number.DraggableLabel(dragLabel, EditorTheme.Ink400);
                 number.Width(UnitValue.Stretch()).Height(RowHeight).Show();
                 return;
 
             case NodeValueKind.Integer:
-                var integer = Origami.NumericField<int>(paper, id, value.Integer, v => editing.Edit(edit, () => value.Integer = v, false));
+                NumericFieldBuilder<int> integer = Origami.NumericField<int>(paper, id, value.Integer, v => editing.Edit(edit, () => value.Integer = v, false));
                 if (dragLabel != null) integer.DraggableLabel(dragLabel, EditorTheme.Ink400);
                 integer.Width(UnitValue.Stretch()).Height(RowHeight).Show();
                 return;
@@ -521,7 +521,7 @@ public sealed class AnimationNodeCard
     private static string[] BuildBoneChoices()
     {
         HumanBodyBone[] bones = Enum.GetValues<HumanBodyBone>();
-        var choices = new string[bones.Length + 1];
+        string[] choices = new string[bones.Length + 1];
         for (int i = 0; i < bones.Length; i++)
             choices[i] = System.Text.RegularExpressions.Regex.Replace(bones[i].ToString(), "(?<=[a-z])(?=[A-Z])", " ");
         choices[^1] = "Custom";

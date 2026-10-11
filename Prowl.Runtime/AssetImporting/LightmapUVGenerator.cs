@@ -36,7 +36,7 @@ public static class LightmapUVGenerator
         for (int i = 0; i < verts.Length; i++)
             positions[i] = new Double3(verts[i].X, verts[i].Y, verts[i].Z);
 
-        var tris = new int[indices.Length];
+        int[] tris = new int[indices.Length];
         for (int i = 0; i < indices.Length; i++)
             tris[i] = (int)indices[i];
 
@@ -91,15 +91,15 @@ public static class LightmapUVGenerator
         // that are continuous within a chart weld, while corners across a seam stay split.
         var map = new Dictionary<(int orig, int qu, int qv), uint>(verts.Length * 2);
         var newVerts = new List<Float3>(verts.Length);
-        var newNormals = normals != null ? new List<Float3>(verts.Length) : null;
-        var newUV = uv != null ? new List<Float2>(verts.Length) : null;
+        List<Float3>? newNormals = normals != null ? new List<Float3>(verts.Length) : null;
+        List<Float2>? newUV = uv != null ? new List<Float2>(verts.Length) : null;
         var newUV2 = new List<Float2>(verts.Length);
-        var newTangents = tangents != null ? new List<Float4>(verts.Length) : null;
-        var newColors = colors != null ? new List<Color>(verts.Length) : null;
-        var newColors32 = colors32 != null ? new List<Color32>(verts.Length) : null;
-        var newBoneIdx = boneIdx != null ? new List<Float4>(verts.Length) : null;
-        var newBoneW = boneW != null ? new List<Float4>(verts.Length) : null;
-        var newIndices = new uint[indices.Length];
+        List<Float4>? newTangents = tangents != null ? new List<Float4>(verts.Length) : null;
+        List<Color>? newColors = colors != null ? new List<Color>(verts.Length) : null;
+        List<Color32>? newColors32 = colors32 != null ? new List<Color32>(verts.Length) : null;
+        List<Float4>? newBoneIdx = boneIdx != null ? new List<Float4>(verts.Length) : null;
+        List<Float4>? newBoneW = boneW != null ? new List<Float4>(verts.Length) : null;
+        uint[] newIndices = new uint[indices.Length];
 
         const double Q = 65536.0;
 
@@ -107,7 +107,7 @@ public static class LightmapUVGenerator
         {
             int orig = (int)indices[corner];
             Double2 uvd = perCorner[corner];
-            var key = (orig, (int)Math.Round(uvd.X * Q), (int)Math.Round(uvd.Y * Q));
+            (int orig, int, int) key = (orig, (int)Math.Round(uvd.X * Q), (int)Math.Round(uvd.Y * Q));
 
             if (!map.TryGetValue(key, out uint ni))
             {
@@ -129,15 +129,15 @@ public static class LightmapUVGenerator
 
         // Vertices first: when the count changes the setter resets the dependent channels, so the
         // assignments below must follow. Index/topology length is unchanged so submeshes stay valid.
-        mesh.Vertices = newVerts.ToArray();
-        if (newNormals != null) mesh.Normals = newNormals.ToArray();
-        if (newUV != null) mesh.UV = newUV.ToArray();
-        mesh.UV2 = newUV2.ToArray();
-        if (newTangents != null) mesh.Tangents = newTangents.ToArray();
-        if (newColors != null) mesh.Colors = newColors.ToArray();
-        else if (newColors32 != null) mesh.Colors32 = newColors32.ToArray();
-        if (newBoneIdx != null) mesh.BoneIndices = newBoneIdx.ToArray();
-        if (newBoneW != null) mesh.BoneWeights = newBoneW.ToArray();
+        mesh.Vertices = [.. newVerts];
+        if (newNormals != null) mesh.Normals = [.. newNormals];
+        if (newUV != null) mesh.UV = [.. newUV];
+        mesh.UV2 = [.. newUV2];
+        if (newTangents != null) mesh.Tangents = [.. newTangents];
+        if (newColors != null) mesh.Colors = [.. newColors];
+        else if (newColors32 != null) mesh.Colors32 = [.. newColors32];
+        if (newBoneIdx != null) mesh.BoneIndices = [.. newBoneIdx];
+        if (newBoneW != null) mesh.BoneWeights = [.. newBoneW];
 
         if (newVerts.Count > ushort.MaxValue)
             mesh.IndexFormat = IndexFormat.UInt32;

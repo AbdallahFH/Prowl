@@ -57,7 +57,7 @@ internal static class RoslynScriptBackend
     }
 
     private static readonly Dictionary<string, MetadataReference> s_refCache = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly Dictionary<string, UnitState> s_states = new();
+    private static readonly Dictionary<string, UnitState> s_states = [];
     private static readonly object s_lock = new();
 
     private static readonly CSharpParseOptions s_parseOptions = new CSharpParseOptions(LanguageVersion.Latest)
@@ -85,7 +85,7 @@ internal static class RoslynScriptBackend
             // 1. Read + hash every source file.
             var currentHashes = new Dictionary<string, ulong>(StringComparer.OrdinalIgnoreCase);
             var fileBytes = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
-            foreach (var file in unit.Scripts)
+            foreach (string file in unit.Scripts)
             {
                 byte[] bytes;
                 try { bytes = File.ReadAllBytes(file); }
@@ -94,8 +94,8 @@ internal static class RoslynScriptBackend
                 currentHashes[file] = Fnv1a64(bytes);
             }
 
-            var references = BuildReferences(unit, peerRefs, nugetDllPaths);
-            s_states.TryGetValue(stateKey, out var state);
+            List<MetadataReference> references = BuildReferences(unit, peerRefs, nugetDllPaths);
+            s_states.TryGetValue(stateKey, out UnitState? state);
 
             // 2. Whole unit skip: unchanged source + references since the last successful compile.
             if (state?.Image != null
@@ -114,10 +114,10 @@ internal static class RoslynScriptBackend
 
             // 3. Build the current tree set, reusing unchanged trees by content hash.
             var newTrees = new Dictionary<string, (ulong Hash, SyntaxTree Tree)>(StringComparer.OrdinalIgnoreCase);
-            foreach (var file in unit.Scripts)
+            foreach (string file in unit.Scripts)
             {
                 ulong hash = currentHashes[file];
-                if (state != null && state.Trees.TryGetValue(file, out var prev) && prev.Hash == hash)
+                if (state != null && state.Trees.TryGetValue(file, out (ulong Hash, SyntaxTree Tree) prev) && prev.Hash == hash)
                 {
                     newTrees[file] = prev; // unchanged, reuse the exact tree
                 }
@@ -134,12 +134,12 @@ internal static class RoslynScriptBackend
             {
                 compilation = state.Compilation;
 
-                foreach (var (path, entry) in state.Trees)
-                    if (!newTrees.TryGetValue(path, out var ne) || !ReferenceEquals(ne.Tree, entry.Tree))
+                foreach ((string? path, (ulong Hash, SyntaxTree Tree) entry) in state.Trees)
+                    if (!newTrees.TryGetValue(path, out (ulong Hash, SyntaxTree Tree) ne) || !ReferenceEquals(ne.Tree, entry.Tree))
                         compilation = compilation.RemoveSyntaxTrees(entry.Tree);
 
-                foreach (var (path, entry) in newTrees)
-                    if (!state.Trees.TryGetValue(path, out var oe) || !ReferenceEquals(oe.Tree, entry.Tree))
+                foreach ((string? path, (ulong Hash, SyntaxTree Tree) entry) in newTrees)
+                    if (!state.Trees.TryGetValue(path, out (ulong Hash, SyntaxTree Tree) oe) || !ReferenceEquals(oe.Tree, entry.Tree))
                         compilation = compilation.AddSyntaxTrees(entry.Tree);
 
                 if (!SameReferences(state.References, references))
@@ -169,7 +169,7 @@ internal static class RoslynScriptBackend
             // 6. Update state. Compilation/trees/refs reflect what we just built; the success snapshot
             //    only advances when the emit actually succeeded (so a repeat of failing source does not
             //    get skipped and silently return the last good image).
-            var refArray = references.ToArray();
+            MetadataReference[] refArray = [.. references];
             state ??= new UnitState();
             state.Trees = newTrees;
             state.Compilation = compilation;
@@ -247,7 +247,7 @@ internal static class RoslynScriptBackend
         // except the shared framework: a self-contained editor publish drops the whole .NET runtime
         // there too, and dropping it would leave the compile without System.Object (CS0518).
         string tpa = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string ?? "";
-        foreach (var path in tpa.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        foreach (string path in tpa.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             string name = Path.GetFileNameWithoutExtension(path);
             if (unit.NoEngineReferences && !ScriptCompiler.IsFrameworkAssembly(name) && IsUnderDirectory(path, engineDir))
@@ -257,7 +257,7 @@ internal static class RoslynScriptBackend
 
         // Nothing above is guaranteed to land: an empty TPA list, or a filter that goes wrong, leaves a
         // compile with no System.Object at all (CS0518). Make sure the running corelib is in there.
-        var corelib = typeof(object).Assembly;
+        Assembly corelib = typeof(object).Assembly;
         string corelibName = corelib.GetName().Name ?? "System.Private.CoreLib";
         if (!seen.Contains(corelibName))
             AddFileReference(refs, seen, corelibName, corelib.Location);
@@ -272,16 +272,16 @@ internal static class RoslynScriptBackend
         }
 
         // Managed plugins.
-        foreach (var pluginPath in unit.ManagedPluginPaths)
+        foreach (string pluginPath in unit.ManagedPluginPaths)
             AddFileReference(refs, seen, Path.GetFileNameWithoutExtension(pluginPath), pluginPath);
 
         // Peer user assemblies compiled earlier this run (in dependency order), referenced in memory.
-        foreach (var refName in unit.AssemblyReferences)
-            if (peerRefs.TryGetValue(refName, out var mref) && seen.Add(refName))
+        foreach (string refName in unit.AssemblyReferences)
+            if (peerRefs.TryGetValue(refName, out MetadataReference? mref) && seen.Add(refName))
                 refs.Add(mref);
 
         // NuGet package assemblies.
-        foreach (var dll in nugetDllPaths)
+        foreach (string dll in nugetDllPaths)
             AddFileReference(refs, seen, Path.GetFileNameWithoutExtension(dll), dll);
 
         return refs;
@@ -292,7 +292,7 @@ internal static class RoslynScriptBackend
         if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
         if (!seen.Add(name)) return; // first definition of a given assembly name wins
 
-        if (!s_refCache.TryGetValue(path, out var mref))
+        if (!s_refCache.TryGetValue(path, out MetadataReference? mref))
         {
             try { mref = MetadataReference.CreateFromFile(path); }
             catch { return; } // native library or unreadable file
@@ -304,8 +304,8 @@ internal static class RoslynScriptBackend
     private static bool SameHashes(Dictionary<string, ulong> a, Dictionary<string, ulong> b)
     {
         if (a.Count != b.Count) return false;
-        foreach (var (key, hash) in b)
-            if (!a.TryGetValue(key, out var h) || h != hash) return false;
+        foreach ((string? key, ulong hash) in b)
+            if (!a.TryGetValue(key, out ulong h) || h != hash) return false;
         return true;
     }
 
@@ -357,7 +357,7 @@ internal static class NuGetReferenceResolver
         // Fresh cache: reuse it, no restore.
         if (File.Exists(cachePath) && File.GetLastWriteTimeUtc(cachePath) >= propsTime)
         {
-            var cached = LoadCache(cachePath);
+            Dictionary<string, List<string>>? cached = LoadCache(cachePath);
             if (cached != null) return cached;
         }
 
@@ -366,15 +366,15 @@ internal static class NuGetReferenceResolver
         var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         string assetsPath = Path.Combine(project.RootPath, "obj", "project.assets.json");
 
-        foreach (var unit in units)
+        foreach (CompilationUnit unit in units)
         {
             Runtime.Debug.Log($"[ScriptCompiler] Restoring NuGet packages for {unit.Name}...");
-            var (exit, stdout, stderr) = ScriptCompiler.RunDotnetCommand($"restore \"{unit.CsprojPath}\"", project.RootPath);
+            (int exit, string? stdout, string? stderr) = ScriptCompiler.RunDotnetCommand($"restore \"{unit.CsprojPath}\"", project.RootPath);
             if (exit != 0)
             {
                 Runtime.Debug.LogError($"[ScriptCompiler] Package restore failed for {unit.Name}.");
                 ScriptCompiler.LogBuildOutput(stdout, stderr);
-                result[unit.Name] = new();
+                result[unit.Name] = [];
                 continue;
             }
             result[unit.Name] = ParseAssetsFile(assetsPath);
@@ -392,35 +392,35 @@ internal static class NuGetReferenceResolver
         try
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(assetsPath));
-            var root = doc.RootElement;
+            JsonElement root = doc.RootElement;
 
             var folders = new List<string>();
-            if (root.TryGetProperty("packageFolders", out var pf))
-                foreach (var f in pf.EnumerateObject())
+            if (root.TryGetProperty("packageFolders", out JsonElement pf))
+                foreach (JsonProperty f in pf.EnumerateObject())
                     folders.Add(f.Name);
 
-            if (!root.TryGetProperty("targets", out var targets)) return result;
+            if (!root.TryGetProperty("targets", out JsonElement targets)) return result;
 
-            foreach (var target in targets.EnumerateObject())
+            foreach (JsonProperty target in targets.EnumerateObject())
             {
                 if (target.Name.Contains('/')) continue; // skip runtime specific (RID) targets
 
-                foreach (var pkg in target.Value.EnumerateObject())
+                foreach (JsonProperty pkg in target.Value.EnumerateObject())
                 {
-                    if (!pkg.Value.TryGetProperty("compile", out var compile)) continue;
+                    if (!pkg.Value.TryGetProperty("compile", out JsonElement compile)) continue;
 
                     int slash = pkg.Name.IndexOf('/');
                     if (slash < 0) continue;
                     string id = pkg.Name[..slash];
                     string version = pkg.Name[(slash + 1)..];
 
-                    foreach (var item in compile.EnumerateObject())
+                    foreach (JsonProperty item in compile.EnumerateObject())
                     {
                         string rel = item.Name;
                         if (rel.EndsWith("_._", StringComparison.Ordinal)) continue; // empty placeholder
 
                         string relNative = rel.Replace('/', Path.DirectorySeparatorChar);
-                        foreach (var folder in folders)
+                        foreach (string folder in folders)
                         {
                             string abs = Path.Combine(folder, id.ToLowerInvariant(), version, relNative);
                             if (File.Exists(abs)) { result.Add(abs); break; }
@@ -441,7 +441,7 @@ internal static class NuGetReferenceResolver
     {
         try
         {
-            var data = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(File.ReadAllText(path));
+            Dictionary<string, List<string>>? data = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(File.ReadAllText(path));
             return data == null ? null : new Dictionary<string, List<string>>(data, StringComparer.OrdinalIgnoreCase);
         }
         catch { return null; }

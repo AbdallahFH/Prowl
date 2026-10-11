@@ -23,7 +23,7 @@ public abstract class ImportSettingsEditor : AssetImporterEditor
     /// Live settings per asset. Static because the inspector reuses one editor instance per asset type,
     /// so per-instance state would be a single slot the next selection overwrites.
     /// </summary>
-    private static readonly Dictionary<Guid, EchoObject> s_settings = new();
+    private static readonly Dictionary<Guid, EchoObject> s_settings = [];
 
     /// <summary>
     /// This asset's import settings, read from the <c>.meta</c> on first use and topped up with the
@@ -60,7 +60,7 @@ public abstract class ImportSettingsEditor : AssetImporterEditor
         // Top up with any key the importer has gained since this meta was written.
         EchoObject? defaults = EditorRegistries.CreateImporterByName(entry.ImporterType)?.DefaultSettings();
         if (defaults != null)
-            foreach (var kvp in defaults.Tags)
+            foreach (KeyValuePair<string, EchoObject> kvp in defaults.Tags)
                 if (!settings.TryGet(kvp.Key, out _))
                     settings[kvp.Key] = kvp.Value.Clone();
 
@@ -84,7 +84,7 @@ public abstract class ImportSettingsEditor : AssetImporterEditor
         // should win over it.
         MetaFileData meta = MetaFile.Read(metaPath);
         EchoObject merged = meta.Settings ?? EchoObject.NewCompound();
-        foreach (var kvp in settings.Tags)
+        foreach (KeyValuePair<string, EchoObject> kvp in settings.Tags)
             merged[kvp.Key] = kvp.Value.Clone();
 
         meta.Settings = merged;

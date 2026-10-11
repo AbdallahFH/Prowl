@@ -59,7 +59,7 @@ public class UIImage : Graphic
             if (_defaultTexture != null) return _defaultTexture;
             //Texture2D.LoadDefault(DefaultTexture.White)
             var tex = new Texture2D(1, 1);
-            tex.SetData(new System.Memory<byte>(new byte[] { 255, 255, 255, 255 }), 0,0,1,1);
+            tex.SetData(new System.Memory<byte>([255, 255, 255, 255]), 0,0,1,1);
             _defaultTexture = tex;
             return _defaultTexture;
         }
@@ -68,9 +68,12 @@ public class UIImage : Graphic
     /// <summary>
     /// The sprite to display. This is the image's only source: its texture is bound, its atlas sub-rect drives
     /// the UVs, and its 9-slice border feeds <see cref="ImageType.Sliced"/>. With no sprite the image draws
-    /// nothing but still hit-tests as a <see cref="RaycastTarget"/>. New images default to the built-in UI panel.
+    /// nothing but still hit-tests as a <see cref="Graphic.RaycastTarget"/>. New images default to the built-in UI panel.
     /// </summary>
+    // Get only hands out the built-in sprite's handle and loads nothing, so it is safe before the image is attached.
+#pragma warning disable PROWLCO003
     [SerializeField] private Sprite? _sprite = AssetDatabase.Get<Sprite>(BuiltInAssets.GuidFor(DefaultSprite.UIPanel));
+#pragma warning restore PROWLCO003
     public Sprite? Sprite
     {
         get => _sprite;
@@ -81,7 +84,7 @@ public class UIImage : Graphic
     private Sprite? Spr => _sprite;
 
     /// <summary>The source texture bound for drawing: the sprite's texture, or null when no sprite is set.</summary>
-    private Texture2D? SourceTexture { get { var s = Spr; return s is { IsLoaded: true } ? s.Texture : null; } }
+    private Texture2D? SourceTexture { get { Sprite? s = Spr; return s is { IsLoaded: true } ? s.Texture : null; } }
 
     /// <summary>A sprite is assigned but it (or its texture) is still loading, so this image drew nothing.</summary>
     public override bool IsContentPending => _sprite is not null && SourceTexture is null;
@@ -172,7 +175,7 @@ public class UIImage : Graphic
 
     public override void GenerateMesh(UIMeshBuilder b, in UIContext ctx)
     {
-        var rt = GameObject.RectTransform;
+        RectTransform? rt = GameObject.RectTransform;
         if (rt is null) return;
         Rect r = rt.ComputedRect;
         if (r.Size.X <= 0 || r.Size.Y <= 0) return;
@@ -198,7 +201,7 @@ public class UIImage : Graphic
         // Fit the source aspect inside the rect (letterbox), centered, when requested.
         if (_preserveAspect)
         {
-            var (sw, sh) = SourceSize;
+            (float sw, float sh) = SourceSize;
             local = FitAspect(local, sw, sh);
         }
 
@@ -258,7 +261,7 @@ public class UIImage : Graphic
         // Tile at the sprite's native pixel size in the RectTransform's pixel space.
         // NOTE: Border-aware tiling (keeping the sprite's 9-slice edges un-tiled) is not done yet;
         // Tiled currently repeats the whole sprite rect.
-        var (sw, sh) = SourceSize;
+        (float sw, float sh) = SourceSize;
         if (sw <= 0f || sh <= 0f)
         {
             b.AddQuad(local, tinted, Float2.Zero, Float2.One);
@@ -288,7 +291,7 @@ public class UIImage : Graphic
 
     private Float4 ComputeUVBorder()
     {
-        var (sw, sh) = SourceSize;
+        (float sw, float sh) = SourceSize;
         if (sw <= 0f || sh <= 0f) return Float4.Zero;
         Float4 border = EffectiveBorder;
         return new Float4(
@@ -300,7 +303,7 @@ public class UIImage : Graphic
 
     public override void PopulateProperties(PropertyState p, in UIContext _)
     {
-        var srcTex = SourceTexture;
+        Texture2D? srcTex = SourceTexture;
         p.SetTexture("_MainTex", srcTex.IsValid() ? srcTex : defaultTexture);
         // The tint (and CanvasGroup alpha) is already baked into the vertex color in GenerateMesh,
         // and the shader computes texture * vColor * _MainColor - so _MainColor must stay white or

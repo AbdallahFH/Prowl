@@ -236,7 +236,7 @@ public class AnimationGraphTests : RuntimeTestBase
         spine.SetParent(hips, false);
         scene.Add(root);
 
-        var animator = root.AddComponent<Animator>();
+        Animator animator = root.AddComponent<Animator>();
         animator.Avatar = avatar;
         animator.Graph = asset;
 
@@ -277,7 +277,7 @@ public class AnimationGraphTests : RuntimeTestBase
     public void EveryKindOfParameter_IsReadBeforeBinding_AndCarriedAcrossARebind()
     {
         (Scene scene, Animator animator, _) = BlendGraph(0f);
-        AnimationGraph asset = animator.Graph;
+        AnimationGraph asset = animator.Graph!;
         asset.Parameters.Add(new GraphParameterRecord { Name = "Aim", Kind = NodeValueKind.Target });
         asset.Parameters.Add(new GraphParameterRecord { Name = "Tag", Kind = NodeValueKind.Id });
         asset.Invalidate();
@@ -443,7 +443,7 @@ public class AnimationGraphTests : RuntimeTestBase
         Assert.Equal(3.0, Spine(root).LocalPosition.Y, 1);
 
         // The high clip's threshold moves from 1 to 2, so a parameter of 1 now sits halfway between.
-        AnimationGraph asset = animator.Graph;
+        AnimationGraph asset = animator.Graph!;
         asset.Find("blend")!.Inputs[2].Value = 2f;
         asset.Invalidate();
 
@@ -465,7 +465,7 @@ public class AnimationGraphTests : RuntimeTestBase
 
         // An edit that changes nothing about the blend, so all that could move the spine is the rebind
         // dropping the parameter back to its authored default of 1.
-        AnimationGraph asset = animator.Graph;
+        AnimationGraph asset = animator.Graph!;
         asset.Invalidate();
         System.Threading.Thread.Sleep(200);
         Update(scene, 2);
@@ -484,8 +484,8 @@ public class AnimationGraphTests : RuntimeTestBase
         (Scene scene, Animator animator, GameObject root) = BlendGraph(1f);
         Update(scene, 2);
 
-        AnimationGraph old = animator.Graph;
-        var saved = Serializer.Deserialize<AnimationGraph>(Serializer.Serialize(typeof(object), old))!;
+        AnimationGraph old = animator.Graph!;
+        AnimationGraph saved = Serializer.Deserialize<AnimationGraph>(Serializer.Serialize(typeof(object), old))!;
         saved.Find("blend")!.Inputs[2].Value = 2f;
         animator.Graph = saved;
 
@@ -499,9 +499,9 @@ public class AnimationGraphTests : RuntimeTestBase
     {
         (Scene scene, Animator animator, GameObject _) = BlendGraph(1f);
         Update(scene, 2);
-        var before = animator.GraphInstance;
+        AnimationGraphInstance? before = animator.GraphInstance;
 
-        animator.Graph.Invalidate();
+        animator.Graph!.Invalidate();
         Update(scene, 1);
 
         Assert.Same(before, animator.GraphInstance);
@@ -602,7 +602,7 @@ public class AnimationGraphTests : RuntimeTestBase
         (Scene scene, Animator animator, GameObject _) = BlendGraph(0.5f);
         Update(scene, 2);
 
-        AnimationGraph asset = animator.Graph;
+        AnimationGraph asset = animator.Graph!;
         AnimationGraphInstance instance = animator.GraphInstance!;
 
         IReadOnlyDictionary<string, int> nodes = NodesOf(asset, instance);
@@ -877,7 +877,7 @@ public class AnimationGraphTests : RuntimeTestBase
 
         Assert.NotSame(a, b);
         Assert.Same(a, asset.Compile(first));
-        Assert.True(asset.TryGetCompiledMaps(a!, out var nodes, out _));
+        Assert.True(asset.TryGetCompiledMaps(a!, out IReadOnlyDictionary<string, int>? nodes, out _));
         Assert.True(nodes.ContainsKey("pose"));
         Assert.True(asset.TryGetCompiledMaps(b!, out _, out _));
 
@@ -903,11 +903,11 @@ public class AnimationGraphTests : RuntimeTestBase
         (Scene scene, Animator animator, GameObject _) = BlendGraph(0.25f);
         Update(scene, 2);
 
-        AnimationGraph asset = animator.Graph;
+        AnimationGraph asset = animator.Graph!;
         AnimationGraphInstance instance = animator.GraphInstance!;
-        Assert.True(asset.TryGetCompiledMaps(instance.Graph, out var nodes, out _));
+        Assert.True(asset.TryGetCompiledMaps(instance.Graph, out IReadOnlyDictionary<string, int>? nodes, out _));
 
-        var blend = Assert.IsAssignableFrom<IBlendWeights>(instance.TryGetNodeInstance(nodes["blend"]));
+        IBlendWeights blend = Assert.IsAssignableFrom<IBlendWeights>(instance.TryGetNodeInstance(nodes["blend"]));
         Assert.Equal(0.75f, blend.WeightOf(nodes["low"]), 2);
         Assert.Equal(0.25f, blend.WeightOf(nodes["high"]), 2);
         Assert.Equal(0f, blend.WeightOf(nodes["speed"]), 3);
@@ -1043,7 +1043,7 @@ public class AnimationGraphTests : RuntimeTestBase
     private static (MotionSkeleton Skeleton, Avatar Avatar, int Spine) HumanoidRig()
     {
         (string Name, string Parent, HumanBodyBone Bone, Float3 Offset)[] layout =
-        {
+        [
             ("b_root", "", HumanBodyBone.Hips, new Float3(0f, 1f, 0f)),
             ("b_belly", "b_root", HumanBodyBone.Spine, new Float3(0f, 0.2f, 0f)),
             ("b_skull", "b_belly", HumanBodyBone.Head, new Float3(0f, 0.5f, 0f)),
@@ -1059,10 +1059,10 @@ public class AnimationGraphTests : RuntimeTestBase
             ("b_legR", "b_root", HumanBodyBone.RightUpperLeg, new Float3(-0.1f, -0.1f, 0f)),
             ("b_kneeR", "b_legR", HumanBodyBone.RightLowerLeg, new Float3(0f, -0.45f, 0f)),
             ("b_footR", "b_kneeR", HumanBodyBone.RightFoot, new Float3(0f, -0.45f, 0.05f)),
-        };
+        ];
 
         var ids = new StringID[layout.Length];
-        var parents = new int[layout.Length];
+        int[] parents = new int[layout.Length];
         var pose = new Transform3D[layout.Length];
         var description = new HumanDescription();
 

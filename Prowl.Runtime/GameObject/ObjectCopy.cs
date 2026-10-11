@@ -54,7 +54,7 @@ public static class ObjectCopy
 
     /// <summary>Copies several roots as one, so a reference from one root to another lands on that root's copy.</summary>
     public static List<T> CloneAll<T>(IEnumerable<T> sources, CopyMap? map = null) where T : notnull
-        => CloneRoots(sources.Cast<object>().ToList(), map ?? new CopyMap()).Cast<T>().ToList();
+        => [.. CloneRoots([.. sources.Cast<object>()], map ?? new CopyMap()).Cast<T>()];
 
     /// <summary>
     /// Copies a GameObject tree onto an existing one. Objects the map pairs, then components and children of the
@@ -77,14 +77,14 @@ public static class ObjectCopy
         EchoObject echo = Serializer.Serialize(typeof(object), source, written);
 
         var read = new SerializationContext { ExternalReferences = links };
-        foreach (var (from, into) in map.Fills)
+        foreach ((object? from, object? into) in map.Fills)
             if (written.objectToId.TryGetValue(from, out int id))
                 read.ReadInto(id, into);
 
         Serializer.DeserializeInto(echo, target, read);
         map.Ran(written, read);
 
-        foreach (var (filled, identifier) in identities)
+        foreach ((object? filled, Guid identifier) in identities)
             if (filled is GameObject go) go.SetIdentifier(identifier);
             else ((Component)filled).Identifier = identifier;
     }

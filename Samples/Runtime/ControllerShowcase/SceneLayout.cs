@@ -997,7 +997,7 @@ public static class SceneLayout
     /// <summary>A kinematic body, moved through its velocity by a script so what rides it is carried along.</summary>
     private static void Kinematic(GameObject go)
     {
-        var body = go.AddComponent<Rigidbody3D>();
+        Rigidbody3D body = go.AddComponent<Rigidbody3D>();
         body.MotionType = Jitter2.Dynamics.MotionType.Kinematic;
         body.AffectedByGravity = false;
     }
@@ -1076,7 +1076,7 @@ public static class SceneLayout
 
     private static Mesh Heightfield(float size, int cells, Func<float, float, float> height)
     {
-        var heights = new float[cells + 1, cells + 1];
+        float[,] heights = new float[cells + 1, cells + 1];
         for (int z = 0; z <= cells; z++)
             for (int x = 0; x <= cells; x++)
                 heights[x, z] = height(x / (float)cells, z / (float)cells);

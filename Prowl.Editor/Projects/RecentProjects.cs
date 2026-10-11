@@ -86,7 +86,7 @@ public static class RecentProjects
     public static void SetFavorite(string path, bool favorite)
     {
         _entries ??= Load();
-        var entry = _entries.Find(e => e.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+        RecentProjectEntry? entry = _entries.Find(e => e.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
         if (entry == null || entry.Favorite == favorite) return;
         entry.Favorite = favorite;
         Save();
@@ -97,8 +97,8 @@ public static class RecentProjects
     {
         _entries ??= Load();
         var ordered = new List<RecentProjectEntry>(_entries.Count);
-        foreach (var e in _entries) if (e.Favorite) ordered.Add(e);
-        foreach (var e in _entries) if (!e.Favorite) ordered.Add(e);
+        foreach (RecentProjectEntry e in _entries) if (e.Favorite) ordered.Add(e);
+        foreach (RecentProjectEntry e in _entries) if (!e.Favorite) ordered.Add(e);
         return ordered;
     }
 
@@ -109,11 +109,11 @@ public static class RecentProjects
             if (File.Exists(_filePath))
             {
                 string json = File.ReadAllText(_filePath);
-                return JsonSerializer.Deserialize<List<RecentProjectEntry>>(json) ?? new();
+                return JsonSerializer.Deserialize<List<RecentProjectEntry>>(json) ?? [];
             }
         }
         catch { }
-        return new();
+        return [];
     }
 
     private static void Save()

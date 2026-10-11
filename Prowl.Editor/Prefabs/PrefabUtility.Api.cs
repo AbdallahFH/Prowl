@@ -61,14 +61,14 @@ public static partial class PrefabUtility
     {
         if (go.IsNotValid() || !PrefabEditingMode.IsEditing) return false;
 
-        var scene = go.Scene;
+        Scene? scene = go.Scene;
         return scene.IsValid() && ReferenceEquals(scene, Scene.Current);
     }
 
     /// <summary>Every instance root of a prefab in the current scene.</summary>
     public static List<GameObject> FindInstancesOf(Guid prefabGuid)
     {
-        var scene = Scene.Current;
+        Scene scene = Scene.Current;
         return scene == null ? [] : FindInstancesOf(prefabGuid, scene);
     }
 
@@ -77,16 +77,16 @@ public static partial class PrefabUtility
     {
         if (scene.IsNotValid() || prefabGuid == Guid.Empty) return [];
 
-        List<GameObject> belonging = scene.AllObjects.Where(go => go.PrefabAssetId == prefabGuid).ToList();
-        List<GameObject> roots = belonging.Where(IsInstanceRoot).ToList();
+        List<GameObject> belonging = [.. scene.AllObjects.Where(go => go.PrefabAssetId == prefabGuid)];
+        List<GameObject> roots = [.. belonging.Where(IsInstanceRoot)];
         if (roots.Count > 0) return roots;
 
         // Nothing in the scene stands for the prefab's root object. That means the asset was rewritten
         // with fresh identities, by a hand edit or by an importer that does not keep them, so no object
         // can be matched to it any more. Falling back to the shape of the hierarchy at least brings the
         // instances up to date, at the cost of rebuilding what is under them.
-        return belonging.Where(go => go.Parent == null || !go.Parent.IsValid()
-            || go.Parent.PrefabAssetId != prefabGuid).ToList();
+        return [.. belonging.Where(go => go.Parent == null || !go.Parent.IsValid()
+            || go.Parent.PrefabAssetId != prefabGuid)];
     }
 
     /// <summary>
@@ -118,14 +118,14 @@ public static partial class PrefabUtility
         GameObject owner = component.GameObject;
         if (owner.IsNotValid()) return null;
 
-        Guid sourceId = owner.GetComponentSourceIdentifier(component);
+        Guid sourceId = component.SourceIdentifier;
         if (sourceId == Guid.Empty) return null;
 
         GameObject? sourceObject = GetCorrespondingObjectFromSource(owner);
         if (sourceObject == null) return null;
 
         return sourceObject.GetComponents<Component>()
-            .FirstOrDefault(c => sourceObject.GetComponentSourceIdentifier(c) == sourceId);
+            .FirstOrDefault(c => c.SourceIdentifier == sourceId);
     }
 
     #endregion
@@ -139,7 +139,7 @@ public static partial class PrefabUtility
     public static List<PropertyOverride> GetPropertyModifications(GameObject go)
     {
         GameObject? instanceRoot = GetPrefabInstanceRoot(go);
-        return instanceRoot == null ? [] : instanceRoot.PrefabOverrides.ToList();
+        return instanceRoot == null ? [] : [.. instanceRoot.PrefabOverrides];
     }
 
     /// <summary>
@@ -155,8 +155,8 @@ public static partial class PrefabUtility
         if (instanceRoot == null) return;
         if (!GuardNotPlaying("change prefab overrides")) return;
 
-        List<PropertyOverride> before = instanceRoot.PrefabOverrides.ToList();
-        List<PropertyOverride> after = modifications.ToList();
+        List<PropertyOverride> before = [.. instanceRoot.PrefabOverrides];
+        List<PropertyOverride> after = [.. modifications];
         Guid rootId = instanceRoot.Identifier;
 
         Apply(after);
@@ -172,7 +172,7 @@ public static partial class PrefabUtility
             GameObject? live = Undo.FindGO(rootId);
             if (live.IsNotValid()) return;
 
-            live!.PrefabOverrides = overrides.ToList();
+            live!.PrefabOverrides = [.. overrides];
             RefreshOneInstance(live);
         }
     }
@@ -276,7 +276,7 @@ public static partial class PrefabUtility
         if (go.IsNotValid()) return false;
         if (!GuardNotPlaying("connect a prefab")) return false;
 
-        if (LoadPrefab(prefabGuid) is not PrefabAsset)
+        if (LoadPrefab(prefabGuid) is null)
         {
             Runtime.Debug.LogWarning("[Prefab] Cannot connect there is no prefab with that id.");
             return false;
@@ -285,7 +285,7 @@ public static partial class PrefabUtility
         GameObject? source = GetCachedPrefabSource(prefabGuid);
         if (source == null) return false;
 
-        var previous = CapturePrefabState(go, go.PrefabAssetId);
+        List<PrefabState> previous = CapturePrefabState(go, go.PrefabAssetId);
 
         var unmatched = new List<string>();
         AdoptSourceIdentities(go, source, prefabGuid, unmatched);
@@ -370,7 +370,7 @@ public static partial class PrefabUtility
     /// </summary>
     public static bool SaveAsPrefabAsset(GameObject source, string relativeSavePath, bool overwrite = false)
     {
-        var previous = source.IsValid() ? CapturePrefabState(source, source.PrefabAssetId) : null;
+        List<PrefabState>? previous = source.IsValid() ? CapturePrefabState(source, source.PrefabAssetId) : null;
 
         if (!SaveAsPrefabAssetAndConnect(source, relativeSavePath, overwrite)) return false;
 

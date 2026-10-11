@@ -254,7 +254,7 @@ public sealed class AudioClip : Asset, ISerializable
             }
 
             // The count is total samples across every channel, not frames.
-            var samples = new float[sampleCount];
+            float[] samples = new float[sampleCount];
             Marshal.Copy(decoded, samples, 0, samples.Length);
             return samples;
         }
@@ -294,6 +294,9 @@ public sealed class AudioClip : Asset, ISerializable
     /// <summary>
     /// Wraps interleaved float samples in a minimal WAVE container.
     /// </summary>
+    /// <param name="samples">Interleaved float samples.</param>
+    /// <param name="channels">Number of interleaved channels.</param>
+    /// <param name="sampleRate">Samples per second per channel.</param>
     /// <param name="sixteenBit">
     /// Store as 16 bit PCM rather than 32 bit float, halving the size for a noise floor no game source
     /// material gets near. Float keeps a procedurally built clip bit exact through a round trip, which
@@ -317,7 +320,7 @@ public sealed class AudioClip : Asset, ISerializable
         if (HeaderBytes + dataBytes > int.MaxValue)
             throw new ArgumentOutOfRangeException(nameof(samples), "The audio is too large to hold in one WAVE container.");
 
-        var wave = new byte[HeaderBytes + (int)dataBytes];
+        byte[] wave = new byte[HeaderBytes + (int)dataBytes];
         Span<byte> header = wave.AsSpan(0, HeaderBytes);
 
         "RIFF"u8.CopyTo(header);
@@ -388,7 +391,7 @@ public sealed class AudioClip : Asset, ISerializable
         if (handle == IntPtr.Zero || dataSize == 0)
             return [];
 
-        var data = new byte[dataSize];
+        byte[] data = new byte[dataSize];
         Marshal.Copy(handle, data, 0, data.Length);
         return data;
     }

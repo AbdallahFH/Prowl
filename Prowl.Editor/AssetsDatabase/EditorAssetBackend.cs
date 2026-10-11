@@ -12,6 +12,7 @@ using Prowl.Editor.Projects;
 using Prowl.Editor.Projects.Scripting;
 using Prowl.Editor.Thumbnails;
 using Prowl.Runtime;
+using Prowl.Runtime.Resources;
 
 namespace Prowl.Editor;
 
@@ -31,7 +32,7 @@ public class EditorAssetBackend : AssetBackend
     private readonly ConcurrentDictionary<Guid, (Guid parentGuid, int index)> _subAssetIndex = new();
     // GPU-uploaded thumbnail cache. Main-thread-only (texture creation isn't thread-safe), same
     // as _pathToGuid every UI that shows asset thumbnails shares this instead of keeping its own.
-    private readonly Dictionary<Guid, Runtime.Resources.Texture2D?> _thumbnailTextures = new();
+    private readonly Dictionary<Guid, Runtime.Resources.Texture2D?> _thumbnailTextures = [];
     // Held only around reading or replacing a cache file, so the loader never reads one mid-replace.
     private readonly object _cacheFileLock = new();
     private IReadOnlyList<ResourceEntry> _resources = [];
@@ -45,8 +46,8 @@ public class EditorAssetBackend : AssetBackend
     // Main-thread-only (the panel and ProcessFileChanges both run there), so no locking is needed.
     private sealed class FolderContents
     {
-        public readonly List<FolderRecord> SubFolders = new();
-        public readonly List<FileRecord> Files = new();
+        public readonly List<FolderRecord> SubFolders = [];
+        public readonly List<FileRecord> Files = [];
     }
     private readonly Dictionary<string, FolderContents> _folderIndex = new(StringComparer.OrdinalIgnoreCase);
     private bool _folderIndexDirty = true;
@@ -107,10 +108,10 @@ public class EditorAssetBackend : AssetBackend
         CleanupOrphanedMetaTempFiles();
 
         // Try loading cached index for fast startup
-        var cached = MetadataCache.Load(_project.MetadataDbPath);
+        Dictionary<Guid, AssetEntry> cached = MetadataCache.Load(_project.MetadataDbPath);
         if (cached.Count > 0)
         {
-            foreach (var (guid, entry) in cached)
+            foreach ((Guid guid, AssetEntry? entry) in cached)
             {
                 _guidToEntry[guid] = entry;
                 _pathToGuid[entry.Path] = guid;
@@ -125,7 +126,7 @@ public class EditorAssetBackend : AssetBackend
                 // same seeding or a later DependenciesOnly build silently drops what they reference.
                 if (entry.SubAssets is { Length: > 0 })
                 {
-                    foreach (var sub in entry.SubAssets)
+                    foreach (SubAssetEntry sub in entry.SubAssets)
                         if (sub.Dependencies.Length + sub.SoftDependencies.Length > 0)
                             _dependencies.SetDependencies(sub.Guid, sub.Dependencies.Concat(sub.SoftDependencies));
                 }
@@ -194,11 +195,11 @@ public class EditorAssetBackend : AssetBackend
     /// </summary>
     private void CleanupOrphanedMetaTempFiles()
     {
-        var assetsPath = _project.AssetsPath;
+        string assetsPath = _project.AssetsPath;
         if (!Directory.Exists(assetsPath)) return;
 
         foreach (string pattern in new[] { "*.meta.tmp", "*.prefab.tmp" })
-            foreach (var tmp in Directory.EnumerateFiles(assetsPath, pattern, SearchOption.AllDirectories))
+            foreach (string tmp in Directory.EnumerateFiles(assetsPath, pattern, SearchOption.AllDirectories))
             {
                 try { File.Delete(tmp); }
                 catch (Exception ex) { Runtime.Debug.LogWarning($"Failed to delete orphaned temp file '{tmp}': {ex.Message}"); }
@@ -222,7 +223,7 @@ public class EditorAssetBackend : AssetBackend
     public void RefreshResourcesMap()
     {
         var resources = new List<ResourceEntry>();
-        foreach (var entry in _guidToEntry.Values.OrderBy(e => e.Path, StringComparer.OrdinalIgnoreCase))
+        foreach (AssetEntry? entry in _guidToEntry.Values.OrderBy(e => e.Path, StringComparer.OrdinalIgnoreCase))
             AddResourcePaths(resources, entry);
         _resources = resources;
         _resourcesIndexVersion = IndexVersion;
@@ -239,7 +240,7 @@ public class EditorAssetBackend : AssetBackend
         if (loadPath == null) return;
 
         resources.Add(new ResourceEntry(loadPath, entry.Guid, entry.MainAssetTypeName ?? ""));
-        foreach (var sub in entry.SubAssets)
+        foreach (SubAssetEntry sub in entry.SubAssets)
             resources.Add(new ResourceEntry(AssetDatabase.GetLoadPath(entry.Path, sub.Name)!, sub.Guid, sub.TypeName));
     }
 
@@ -249,8 +250,8 @@ public class EditorAssetBackend : AssetBackend
 
     public override Type? GetAssetType(Guid assetId)
     {
-        if (_guidToEntry.TryGetValue(assetId, out var entry)) return entry.MainAssetType;
-        if (_subAssetIndex.TryGetValue(assetId, out var sub) && _guidToEntry.TryGetValue(sub.parentGuid, out var parent)
+        if (_guidToEntry.TryGetValue(assetId, out AssetEntry? entry)) return entry.MainAssetType;
+        if (_subAssetIndex.TryGetValue(assetId, out (Guid parentGuid, int index) sub) && _guidToEntry.TryGetValue(sub.parentGuid, out AssetEntry? parent)
             && sub.index < parent.SubAssets.Length)
             return parent.SubAssets[sub.index].Type;
         return null;
@@ -258,8 +259,8 @@ public class EditorAssetBackend : AssetBackend
 
     public override string? GetAssetPath(Guid assetId)
     {
-        if (_guidToEntry.TryGetValue(assetId, out var entry)) return entry.Path;
-        if (_subAssetIndex.TryGetValue(assetId, out var sub) && _guidToEntry.TryGetValue(sub.parentGuid, out var parent)
+        if (_guidToEntry.TryGetValue(assetId, out AssetEntry? entry)) return entry.Path;
+        if (_subAssetIndex.TryGetValue(assetId, out (Guid parentGuid, int index) sub) && _guidToEntry.TryGetValue(sub.parentGuid, out AssetEntry? parent)
             && sub.index < parent.SubAssets.Length)
             return $"{parent.Path}#{parent.SubAssets[sub.index].Name}";
         return null;
@@ -270,9 +271,9 @@ public class EditorAssetBackend : AssetBackend
     /// <summary>The type name, and the hard and soft dependencies, an asset ships with.</summary>
     public (string TypeName, Guid[] Hard, Guid[] Soft) GetManifestInfo(Guid assetId)
     {
-        if (_guidToEntry.TryGetValue(assetId, out var entry))
+        if (_guidToEntry.TryGetValue(assetId, out AssetEntry? entry))
             return (entry.MainAssetTypeName ?? "", entry.Dependencies, entry.SoftDependencies);
-        if (_subAssetIndex.TryGetValue(assetId, out var sub) && _guidToEntry.TryGetValue(sub.parentGuid, out var parent)
+        if (_subAssetIndex.TryGetValue(assetId, out (Guid parentGuid, int index) sub) && _guidToEntry.TryGetValue(sub.parentGuid, out AssetEntry? parent)
             && sub.index < parent.SubAssets.Length)
         {
             SubAssetEntry subEntry = parent.SubAssets[sub.index];
@@ -329,7 +330,7 @@ public class EditorAssetBackend : AssetBackend
 
     // The entry a GUID imports through: its own, or its parent's for a sub-asset.
     private AssetEntry? OwningEntry(Guid assetId)
-        => _subAssetIndex.TryGetValue(assetId, out var sub) ? GetEntry(sub.parentGuid) : GetEntry(assetId);
+        => _subAssetIndex.TryGetValue(assetId, out (Guid parentGuid, int index) sub) ? GetEntry(sub.parentGuid) : GetEntry(assetId);
 
     /// <summary>Lazily backfill a thumbnail the first time an asset is actually loaded, for one whose
     /// thumbnail is missing (a fresh checkout, or a deleted thumbnail file).</summary>
@@ -351,13 +352,13 @@ public class EditorAssetBackend : AssetBackend
 
     private void ScanAssets()
     {
-        var assetsPath = _project.AssetsPath;
+        string assetsPath = _project.AssetsPath;
         if (!Directory.Exists(assetsPath)) return;
 
         // Track which paths we find on disk
         var foundPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var file in Directory.EnumerateFiles(assetsPath, "*", SearchOption.AllDirectories))
+        foreach (string file in Directory.EnumerateFiles(assetsPath, "*", SearchOption.AllDirectories))
         {
             // Skip .meta files and hidden files
             if (file.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)) continue;
@@ -380,7 +381,7 @@ public class EditorAssetBackend : AssetBackend
         }
 
         // Also scan for directories (they need .meta files too for folder GUIDs)
-        foreach (var dir in Directory.EnumerateDirectories(assetsPath, "*", SearchOption.AllDirectories))
+        foreach (string dir in Directory.EnumerateDirectories(assetsPath, "*", SearchOption.AllDirectories))
         {
             string dirName = Path.GetFileName(dir);
             if (dirName.StartsWith('.')) continue;
@@ -394,9 +395,9 @@ public class EditorAssetBackend : AssetBackend
         var toRemove = _guidToEntry.Where(kv => !foundPaths.Contains(kv.Value.Path))
             .Select(kv => kv.Key).ToList();
 
-        foreach (var guid in toRemove)
+        foreach (Guid guid in toRemove)
         {
-            var entry = _guidToEntry[guid];
+            AssetEntry entry = _guidToEntry[guid];
 
             // Missing rather than gone, so everything referencing them keeps the GUID.
             AssetDatabase.MarkMissing(guid);
@@ -426,16 +427,16 @@ public class EditorAssetBackend : AssetBackend
         string importerName = EditorRegistries.GetImporterTypeName(ext);
 
         // Get default settings from the importer (for new meta files)
-        var importer = EditorRegistries.CreateImporterByName(importerName);
-        var defaultSettings = importer?.DefaultSettings();
+        AssetImporter? importer = EditorRegistries.CreateImporterByName(importerName);
+        EchoObject? defaultSettings = importer?.DefaultSettings();
 
         // Ensure .meta exists (with default settings if creating new)
-        var meta = MetaFile.EnsureMeta(file, importerName, importer?.Version ?? 1, defaultSettings);
+        MetaFileData meta = MetaFile.EnsureMeta(file, importerName, importer?.Version ?? 1, defaultSettings);
 
-        if (_pathToGuid.TryGetValue(relativePath, out var existingGuid))
+        if (_pathToGuid.TryGetValue(relativePath, out Guid existingGuid))
         {
             // Already tracked check if needs reimport
-            var entry = _guidToEntry[existingGuid];
+            AssetEntry entry = _guidToEntry[existingGuid];
             long currentTicks = File.GetLastWriteTimeUtc(file).Ticks;
 
             // Only assets that produce an object have a cache to go missing. A script produces none,
@@ -470,7 +471,7 @@ public class EditorAssetBackend : AssetBackend
                 // Remove old sub-asset index entries
                 if (entry.SubAssets != null)
                 {
-                    foreach (var sub in entry.SubAssets)
+                    foreach (SubAssetEntry sub in entry.SubAssets)
                     {
                         _subAssetIndex.TryRemove(sub.Guid, out _);
                         AssetDatabase.MarkMissing(sub.Guid);
@@ -492,7 +493,7 @@ public class EditorAssetBackend : AssetBackend
         }
         else if (_guidToEntry.ContainsKey(meta.Guid))
         {
-            var entry = _guidToEntry[meta.Guid];
+            AssetEntry entry = _guidToEntry[meta.Guid];
             string oldPath = entry.Path;
             bool originalStillExists = File.Exists(Path.Combine(assetsPath, oldPath))
                 && !oldPath.Equals(relativePath, StringComparison.OrdinalIgnoreCase);
@@ -512,7 +513,7 @@ public class EditorAssetBackend : AssetBackend
                 else
                 {
                     // The file already holding the GUID is the copy - move it off, then let this one take it.
-                    var displacedMeta = MetaFile.Read(MetaFile.GetMetaPath(claimedAbsolute));
+                    MetaFileData displacedMeta = MetaFile.Read(MetaFile.GetMetaPath(claimedAbsolute));
                     AssignFreshGuid(claimedAbsolute, oldPath, entry.ImporterType, displacedMeta);
 
                     _guidToEntry.TryRemove(meta.Guid, out _);
@@ -603,7 +604,7 @@ public class EditorAssetBackend : AssetBackend
 
         int sinceReclaim = 0;
 
-        foreach (var entry in dirty)
+        foreach (AssetEntry? entry in dirty)
         {
             bool ok = RunImport(entry);
 
@@ -625,7 +626,7 @@ public class EditorAssetBackend : AssetBackend
         if (succeeded.Count > 0)
         {
             IndexVersion++;
-            OnAssetsImported?.Invoke(succeeded.ToArray());
+            OnAssetsImported?.Invoke([.. succeeded]);
             ReclaimMemory();
         }
     }
@@ -674,7 +675,7 @@ public class EditorAssetBackend : AssetBackend
             // If the entry's ImporterType doesn't resolve (stale entry from before an
             // importer was registered), retry with the extension-based lookup. Common
             // case: asset created before its importer existed -> stuck on DefaultImporter.
-            var resolved = EditorRegistries.CreateImporterByName(entry.ImporterType);
+            AssetImporter? resolved = EditorRegistries.CreateImporterByName(entry.ImporterType);
             if (resolved == null)
             {
                 string ext = Path.GetExtension(entry.Path);
@@ -687,7 +688,7 @@ public class EditorAssetBackend : AssetBackend
                 }
             }
 
-            var importer = resolved ?? new DefaultImporter();
+            AssetImporter importer = resolved ?? new DefaultImporter();
             Runtime.Debug.Log($"[AssetDatabase] Importing '{entry.Path}' via {importer.GetType().Name}");
 
             // Read settings from .meta, merge with importer defaults for any missing keys
@@ -697,13 +698,13 @@ public class EditorAssetBackend : AssetBackend
             {
                 try
                 {
-                    var meta = MetaFile.Read(metaPath);
+                    MetaFileData meta = MetaFile.Read(metaPath);
                     settings = meta.Settings;
                 }
                 catch { }
             }
 
-            var defaults = importer.DefaultSettings();
+            EchoObject? defaults = importer.DefaultSettings();
             if (defaults != null)
             {
                 if (settings == null)
@@ -712,7 +713,7 @@ public class EditorAssetBackend : AssetBackend
                 }
                 else
                 {
-                    foreach (var kvp in defaults.Tags)
+                    foreach (KeyValuePair<string, EchoObject> kvp in defaults.Tags)
                         if (!settings.TryGet(kvp.Key, out _))
                             settings[kvp.Key] = kvp.Value.Clone();
                 }
@@ -751,7 +752,7 @@ public class EditorAssetBackend : AssetBackend
 
             // Process sub-assets IDs already assigned by ctx.AddSubAsset. Remember the previous set so
             // sub-assets that disappear this import (renamed/removed) can be cleaned up below.
-            var previousSubGuids = entry.SubAssets?.Select(s => s.Guid).ToHashSet() ?? new HashSet<Guid>();
+            HashSet<Guid> previousSubGuids = entry.SubAssets?.Select(s => s.Guid).ToHashSet() ?? [];
             var newSubGuids = new HashSet<Guid>();
             bool cachesWritten = true;
 
@@ -760,7 +761,7 @@ public class EditorAssetBackend : AssetBackend
                 var subEntries = new List<SubAssetEntry>();
                 for (int i = 0; i < ctx.SubAssets.Count; i++)
                 {
-                    var sub = ctx.SubAssets[i];
+                    Asset sub = ctx.SubAssets[i];
                     if (sub == null) continue;
 
                     // A sub-asset (e.g. a Sprite) can reference assets of its own - track those under its
@@ -779,11 +780,11 @@ public class EditorAssetBackend : AssetBackend
                         Name = sub.Name,
                         Type = sub.GetType(),
                         // Persisted so the graph can be re-seeded on next startup (see Initialize()).
-                        Dependencies = subCtx.Dependencies.ToArray(),
-                        SoftDependencies = subCtx.SoftDependencies.ToArray(),
+                        Dependencies = [.. subCtx.Dependencies],
+                        SoftDependencies = [.. subCtx.SoftDependencies],
                     });
                 }
-                entry.SubAssets = subEntries.ToArray();
+                entry.SubAssets = [.. subEntries];
             }
             else
             {
@@ -792,7 +793,7 @@ public class EditorAssetBackend : AssetBackend
 
             // Drop index entries, cached instances, caches and thumbnails for sub-assets that no
             // longer exist (their derived GUIDs change with their name, so they'd leak otherwise).
-            foreach (var oldGuid in previousSubGuids)
+            foreach (Guid oldGuid in previousSubGuids)
             {
                 if (newSubGuids.Contains(oldGuid)) continue;
                 RemoveSubAsset(oldGuid, includeThumbnails: true);
@@ -823,9 +824,9 @@ public class EditorAssetBackend : AssetBackend
             entry.NeedsReimport = false;
 
             // Hard and soft edges both ship. Editor edges (prefab links) only drive refreshes.
-            entry.Dependencies = mainCtx.Dependencies.ToArray();
-            entry.SoftDependencies = mainCtx.SoftDependencies.ToArray();
-            entry.EditorDependencies = ctx.EditorDependencies.ToArray();
+            entry.Dependencies = [.. mainCtx.Dependencies];
+            entry.SoftDependencies = [.. mainCtx.SoftDependencies];
+            entry.EditorDependencies = [.. ctx.EditorDependencies];
             _dependencies.SetDependencies(entry.Guid, ShippedEdges(mainCtx));
 
             // Every object already standing for this file takes the new content, so whatever holds one keeps it.
@@ -889,7 +890,7 @@ public class EditorAssetBackend : AssetBackend
         try
         {
             // With its base type, since a build does not know the type of what it loads.
-            var echo = Serializer.Serialize(typeof(object), obj, context);
+            EchoObject echo = Serializer.Serialize(typeof(object), obj, context);
             if (echo == null)
             {
                 Runtime.Debug.LogError($"Serializing asset {guid} produced nothing.");
@@ -920,7 +921,7 @@ public class EditorAssetBackend : AssetBackend
 
     /// <summary> Get the asset entry for a relative path, or null if not tracked. </summary>
     public AssetEntry? GetEntry(string relativePath)
-        => _pathToGuid.TryGetValue(relativePath, out var guid) ? _guidToEntry.GetValueOrDefault(guid) : null;
+        => _pathToGuid.TryGetValue(relativePath, out Guid guid) ? _guidToEntry.GetValueOrDefault(guid) : null;
 
     /// <summary> Resolve a relative path to its asset GUID. Returns Guid.Empty when the path is not tracked. </summary>
     public Guid PathToGuid(string relativePath)
@@ -928,7 +929,7 @@ public class EditorAssetBackend : AssetBackend
 
     /// <summary> Resolve a GUID to its relative asset path, or null if not tracked. </summary>
     public string? GuidToPath(Guid guid)
-        => _guidToEntry.TryGetValue(guid, out var entry) ? entry.Path : null;
+        => _guidToEntry.TryGetValue(guid, out AssetEntry? entry) ? entry.Path : null;
 
     /// <summary>
     /// Resolve a GUID to a file path, including sub-assets (returns the parent asset's path).
@@ -936,11 +937,11 @@ public class EditorAssetBackend : AssetBackend
     public string? GuidToPathIncludingSubAssets(Guid guid)
     {
         // Try main asset first
-        if (_guidToEntry.TryGetValue(guid, out var entry))
+        if (_guidToEntry.TryGetValue(guid, out AssetEntry? entry))
             return entry.Path;
         // Try sub-asset -> parent
-        if (_subAssetIndex.TryGetValue(guid, out var subInfo))
-            return _guidToEntry.TryGetValue(subInfo.parentGuid, out var parentEntry) ? parentEntry.Path : null;
+        if (_subAssetIndex.TryGetValue(guid, out (Guid parentGuid, int index) subInfo))
+            return _guidToEntry.TryGetValue(subInfo.parentGuid, out AssetEntry? parentEntry) ? parentEntry.Path : null;
         return null;
     }
 
@@ -948,7 +949,7 @@ public class EditorAssetBackend : AssetBackend
     /// main asset or an unknown GUID.</summary>
     public bool TryGetParentGuid(Guid guid, out Guid parentGuid)
     {
-        if (_subAssetIndex.TryGetValue(guid, out var subInfo))
+        if (_subAssetIndex.TryGetValue(guid, out (Guid parentGuid, int index) subInfo))
         {
             parentGuid = subInfo.parentGuid;
             return true;
@@ -979,23 +980,23 @@ public class EditorAssetBackend : AssetBackend
     public IEnumerable<(Guid guid, string name, string parentPath, Type assetType)> FindAllOfType(Type type)
     {
         // Built-in assets first
-        foreach (var item in Runtime.BuiltInAssets.FindAllOfType(type))
+        foreach ((Guid guid, string name, string path, Type type) item in Runtime.BuiltInAssets.FindAllOfType(type))
             yield return item;
 
         // Main assets
-        foreach (var entry in _guidToEntry.Values)
+        foreach (AssetEntry entry in _guidToEntry.Values)
         {
             if (entry.MainAssetType != null && type.IsAssignableFrom(entry.MainAssetType))
                 yield return (entry.Guid, Path.GetFileNameWithoutExtension(entry.Path), entry.Path, entry.MainAssetType);
         }
 
         // Sub-assets
-        foreach (var entry in _guidToEntry.Values)
+        foreach (AssetEntry entry in _guidToEntry.Values)
         {
             if (entry.SubAssets == null) continue;
-            foreach (var sub in entry.SubAssets)
+            foreach (SubAssetEntry sub in entry.SubAssets)
             {
-                var subType = sub.Type;
+                Type? subType = sub.Type;
                 if (subType != null && type.IsAssignableFrom(subType))
                     yield return (sub.Guid, sub.Name, entry.Path, subType);
             }
@@ -1004,11 +1005,11 @@ public class EditorAssetBackend : AssetBackend
 
     /// <summary>Get sub-assets of a parent asset.</summary>
     public SubAssetEntry[] GetSubAssets(Guid parentGuid)
-        => _guidToEntry.TryGetValue(parentGuid, out var entry) ? entry.SubAssets : Array.Empty<SubAssetEntry>();
+        => _guidToEntry.TryGetValue(parentGuid, out AssetEntry? entry) ? entry.SubAssets : Array.Empty<SubAssetEntry>();
 
     /// <summary> Get the relative path of every tracked asset. </summary>
     public string[] GetAllAssetPaths()
-        => _pathToGuid.Keys.ToArray();
+        => [.. _pathToGuid.Keys];
 
     // ================================================================
     //  Shader menu paths
@@ -1028,10 +1029,10 @@ public class EditorAssetBackend : AssetBackend
     // Kept apart from the project cache below: these are compiled into the runtime assembly, so
     // they are read once and never invalidated, and crucially they are never subject to the
     // liveness check (they have no asset entry to be live against).
-    private readonly Dictionary<Guid, string> _builtInShaderPaths = new();
+    private readonly Dictionary<Guid, string> _builtInShaderPaths = [];
 
     // Written from the import path and read from the inspector, so this carries its own lock.
-    private readonly Dictionary<Guid, string> _projectShaderPaths = new();
+    private readonly Dictionary<Guid, string> _projectShaderPaths = [];
     private readonly object _shaderMenuLock = new();
 
     /// <summary>One assignable shader and the menu path it declares.</summary>
@@ -1056,7 +1057,7 @@ public class EditorAssetBackend : AssetBackend
         {
             SeedBuiltInShaderPaths();
 
-            foreach (var (guid, path) in _builtInShaderPaths)
+            foreach ((Guid guid, string? path) in _builtInShaderPaths)
             {
                 if (!includeHidden && path.StartsWith(HiddenShaderPrefix, StringComparison.Ordinal)) continue;
                 result.Add(new ShaderMenuEntry { Guid = guid, MenuPath = path, IsBuiltIn = true });
@@ -1064,7 +1065,7 @@ public class EditorAssetBackend : AssetBackend
 
             // Driven off the live entries rather than the cache, so a shader whose entry has gone
             // stops being offered whether or not its cached path has been pruned yet.
-            foreach (var entry in _guidToEntry.Values)
+            foreach (AssetEntry entry in _guidToEntry.Values)
             {
                 if (!IsShaderPath(entry.Path)) continue;
 
@@ -1091,7 +1092,7 @@ public class EditorAssetBackend : AssetBackend
             SeedBuiltInShaderPaths();
             if (_builtInShaderPaths.TryGetValue(guid, out string? builtIn)) return builtIn;
 
-            if (_guidToEntry.TryGetValue(guid, out var entry) && IsShaderPath(entry.Path))
+            if (_guidToEntry.TryGetValue(guid, out AssetEntry? entry) && IsShaderPath(entry.Path))
                 return GetOrReadProjectShaderPath(guid, entry.Path);
 
             // Not a live shader any more (deleted, or never one). Drop whatever was cached so the
@@ -1161,7 +1162,7 @@ public class EditorAssetBackend : AssetBackend
             SeedBuiltInShaderPaths();
 
             var live = new HashSet<Guid>();
-            foreach (var entry in _guidToEntry.Values)
+            foreach (AssetEntry entry in _guidToEntry.Values)
             {
                 if (!IsShaderPath(entry.Path)) continue;
                 live.Add(entry.Guid);
@@ -1220,7 +1221,7 @@ public class EditorAssetBackend : AssetBackend
     public IReadOnlyList<FolderRecord> GetSubFolders(string folderRelativePath)
     {
         EnsureFolderIndex();
-        return _folderIndex.TryGetValue(NormalizePath(folderRelativePath ?? ""), out var c)
+        return _folderIndex.TryGetValue(NormalizePath(folderRelativePath ?? ""), out FolderContents? c)
             ? c.SubFolders : Array.Empty<FolderRecord>();
     }
 
@@ -1228,7 +1229,7 @@ public class EditorAssetBackend : AssetBackend
     public IReadOnlyList<FileRecord> GetFolderFiles(string folderRelativePath)
     {
         EnsureFolderIndex();
-        return _folderIndex.TryGetValue(NormalizePath(folderRelativePath ?? ""), out var c)
+        return _folderIndex.TryGetValue(NormalizePath(folderRelativePath ?? ""), out FolderContents? c)
             ? c.Files : Array.Empty<FileRecord>();
     }
 
@@ -1251,7 +1252,7 @@ public class EditorAssetBackend : AssetBackend
         _folderIndex.Clear();
         _folderIndexDirty = false;
 
-        var assetsPath = _project.AssetsPath;
+        string assetsPath = _project.AssetsPath;
         if (!Directory.Exists(assetsPath)) return;
         BuildFolderIndex(assetsPath, "");
     }
@@ -1261,7 +1262,7 @@ public class EditorAssetBackend : AssetBackend
         var contents = new FolderContents();
         try
         {
-            foreach (var dir in Directory.EnumerateDirectories(absolutePath))
+            foreach (string dir in Directory.EnumerateDirectories(absolutePath))
             {
                 string name = Path.GetFileName(dir);
                 string childRel = relativePath.Length == 0 ? name : relativePath + "/" + name;
@@ -1274,7 +1275,7 @@ public class EditorAssetBackend : AssetBackend
                     BuildFolderIndex(dir, childRel);
             }
 
-            foreach (var file in Directory.EnumerateFiles(absolutePath))
+            foreach (string file in Directory.EnumerateFiles(absolutePath))
             {
                 string name = Path.GetFileName(file);
                 if (name.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)) continue;
@@ -1309,15 +1310,15 @@ public class EditorAssetBackend : AssetBackend
     {
         if (guid == Guid.Empty) return null;
 
-        if (_thumbnailTextures.TryGetValue(guid, out var cached))
+        if (_thumbnailTextures.TryGetValue(guid, out Texture2D? cached))
             return cached;
 
-        var thumb = LoadThumbnail(guid);
+        (int width, int height, byte[] pixels)? thumb = LoadThumbnail(guid);
         if (thumb == null) return null;
 
         try
         {
-            var (w, h, pixels) = thumb.Value;
+            (int w, int h, byte[]? pixels) = thumb.Value;
             var tex = new Runtime.Resources.Texture2D((uint)w, (uint)h, false, TextureImageFormat.Color4b);
             tex.SetData<byte>(pixels);
             tex.SetTextureFilters(TextureMin.Linear, TextureMag.Linear);
@@ -1334,7 +1335,7 @@ public class EditorAssetBackend : AssetBackend
     /// <summary>Dispose and drop a single cached thumbnail texture so it's rebuilt from disk on next access.</summary>
     public void InvalidateThumbnailTexture(Guid guid)
     {
-        if (_thumbnailTextures.TryGetValue(guid, out var tex))
+        if (_thumbnailTextures.TryGetValue(guid, out Texture2D? tex))
         {
             if (tex.IsValid()) tex.Dispose();
             _thumbnailTextures.Remove(guid);
@@ -1344,7 +1345,7 @@ public class EditorAssetBackend : AssetBackend
     /// <summary>Dispose and clear every cached thumbnail texture (e.g. after the thumbnail size setting changes).</summary>
     public void ClearThumbnailTextureCache()
     {
-        foreach (var tex in _thumbnailTextures.Values)
+        foreach (Texture2D? tex in _thumbnailTextures.Values)
             if (tex.IsValid()) tex.Dispose();
         _thumbnailTextures.Clear();
     }
@@ -1365,10 +1366,10 @@ public class EditorAssetBackend : AssetBackend
 
         string ext = Path.GetExtension(relativePath);
         string importerName = EditorRegistries.GetImporterTypeName(ext);
-        var importer = EditorRegistries.CreateImporterByName(importerName);
+        AssetImporter? importer = EditorRegistries.CreateImporterByName(importerName);
 
         // Serialize to the file (typeof(object) forces $type inclusion)
-        var echo = Serializer.Serialize(typeof(object), obj);
+        EchoObject echo = Serializer.Serialize(typeof(object), obj);
         if (echo != null)
         {
             if (importer?.Source == EchoSource.Binary) echo.WriteToBinary(new FileInfo(absolutePath));
@@ -1376,7 +1377,7 @@ public class EditorAssetBackend : AssetBackend
         }
 
         // Create meta with correct importer version
-        var meta = MetaFile.CreateNew(importerName, importer?.Version ?? 1);
+        MetaFileData meta = MetaFile.CreateNew(importerName, importer?.Version ?? 1);
         MetaFile.Write(MetaFile.GetMetaPath(absolutePath), meta);
 
         // Add to index and import
@@ -1411,8 +1412,8 @@ public class EditorAssetBackend : AssetBackend
 
         string ext = Path.GetExtension(relativePath);
         string importerName = EditorRegistries.GetImporterTypeName(ext);
-        var importer = EditorRegistries.CreateImporterByName(importerName);
-        var meta = MetaFile.EnsureMeta(absolutePath, importerName, importer?.Version ?? 1, importer?.DefaultSettings());
+        AssetImporter? importer = EditorRegistries.CreateImporterByName(importerName);
+        MetaFileData meta = MetaFile.EnsureMeta(absolutePath, importerName, importer?.Version ?? 1, importer?.DefaultSettings());
 
         // If we still track this path under a guid that no longer matches the on-disk .meta, the file
         // was replaced out-of-band (e.g. the lightmapper deletes + rewrites its whole folder via the
@@ -1420,7 +1421,7 @@ public class EditorAssetBackend : AssetBackend
         // authoritative source after a restart, so drop the stale mapping and re-register under
         // meta.Guid. Otherwise the reimport-in-place branch below returns the old guid, which the
         // caller persists (e.g. into the scene's lightmap refs) yet nothing resolves to it on reload.
-        if (_pathToGuid.TryGetValue(relativePath, out var staleGuid) && staleGuid != meta.Guid)
+        if (_pathToGuid.TryGetValue(relativePath, out Guid staleGuid) && staleGuid != meta.Guid)
         {
             AssetDatabase.MarkMissing(staleGuid);
             _guidToEntry.TryRemove(staleGuid, out _);
@@ -1428,7 +1429,7 @@ public class EditorAssetBackend : AssetBackend
         }
 
         // Already tracked at this path -> reimport in place (re-bake replacement).
-        if (_pathToGuid.TryGetValue(relativePath, out var existingGuid) && _guidToEntry.TryGetValue(existingGuid, out var existing))
+        if (_pathToGuid.TryGetValue(relativePath, out Guid existingGuid) && _guidToEntry.TryGetValue(existingGuid, out AssetEntry? existing))
         {
             existing.NeedsReimport = true;
             RunImport(existing);
@@ -1521,7 +1522,7 @@ public class EditorAssetBackend : AssetBackend
     /// </summary>
     public bool SaveAsset(Guid guid, EchoObject serialized)
     {
-        if (!_guidToEntry.TryGetValue(guid, out var entry)) return false;
+        if (!_guidToEntry.TryGetValue(guid, out AssetEntry? entry)) return false;
 
         EchoSource source = SourceOf(entry);
         if (source == EchoSource.None)
@@ -1554,11 +1555,11 @@ public class EditorAssetBackend : AssetBackend
         relativePath = NormalizePath(relativePath);
         string absolutePath = Path.Combine(_project.AssetsPath, relativePath);
 
-        if (_pathToGuid.TryGetValue(relativePath, out var guid))
+        if (_pathToGuid.TryGetValue(relativePath, out Guid guid))
         {
             // Missing rather than gone, so everything referencing them keeps the GUID and comes back
             // in place if the file is restored.
-            var entry = _guidToEntry.TryGetValue(guid, out var e) ? e : null;
+            AssetEntry? entry = _guidToEntry.TryGetValue(guid, out AssetEntry? e) ? e : null;
             AssetDatabase.MarkMissing(guid);
             ThumbnailGenerator.DeleteThumbnail(guid, _project.ThumbnailsPath);
             InvalidateThumbnailTexture(guid);
@@ -1593,7 +1594,7 @@ public class EditorAssetBackend : AssetBackend
         }
 
         MetadataCache.Save(_project.MetadataDbPath, _guidToEntry.Values);
-        OnAssetsDeleted?.Invoke(new[] { relativePath });
+        OnAssetsDeleted?.Invoke([relativePath]);
         InvalidateFolderIndex();
 
         if (AffectsCompilation(relativePath))
@@ -1669,7 +1670,7 @@ public class EditorAssetBackend : AssetBackend
         }
 
         // Update index
-        if (_pathToGuid.TryGetValue(oldRelativePath, out var guid))
+        if (_pathToGuid.TryGetValue(oldRelativePath, out Guid guid))
         {
             _pathToGuid.TryRemove(oldRelativePath, out _);
             _pathToGuid[newRelativePath] = guid;
@@ -1720,7 +1721,7 @@ public class EditorAssetBackend : AssetBackend
         // disk move atomically via Directory.Move, but the in-memory index needs per-entry
         // path rewrites afterward.
         var toRemap = new List<(string oldPath, string newPath, Guid guid)>();
-        foreach (var kv in _pathToGuid)
+        foreach (KeyValuePair<string, Guid> kv in _pathToGuid)
         {
             string p = kv.Key;
             if (p.Equals(oldRelativeFolder, StringComparison.OrdinalIgnoreCase)
@@ -1745,12 +1746,12 @@ public class EditorAssetBackend : AssetBackend
         }
 
         bool recompile = false;
-        foreach (var (oldPath, newPath, guid) in toRemap)
+        foreach ((string? oldPath, string? newPath, Guid guid) in toRemap)
         {
             recompile |= AffectsCompilation(oldPath);
             _pathToGuid.TryRemove(oldPath, out _);
             _pathToGuid[newPath] = guid;
-            if (_guidToEntry.TryGetValue(guid, out var entry))
+            if (_guidToEntry.TryGetValue(guid, out AssetEntry? entry))
             {
                 entry.Path = newPath;
                 UpdateAssetPaths(entry);
@@ -1772,13 +1773,13 @@ public class EditorAssetBackend : AssetBackend
 
     private void Reimport(Guid guid, ReloadReason reason)
     {
-        if (_guidToEntry.TryGetValue(guid, out var entry))
+        if (_guidToEntry.TryGetValue(guid, out AssetEntry? entry))
         {
             // Clear old thumbnails and invalidate the cached GPU texture
             ThumbnailGenerator.DeleteThumbnail(guid, _project.ThumbnailsPath);
             InvalidateThumbnailTexture(guid);
             if (entry.SubAssets != null)
-                foreach (var sub in entry.SubAssets)
+                foreach (SubAssetEntry sub in entry.SubAssets)
                 {
                     ThumbnailGenerator.DeleteThumbnail(sub.Guid, _project.ThumbnailsPath);
                     InvalidateThumbnailTexture(sub.Guid);
@@ -1790,10 +1791,10 @@ public class EditorAssetBackend : AssetBackend
             finally { _refillReason = ReloadReason.Reimport; }
             MetadataCache.Save(_project.MetadataDbPath, _guidToEntry.Values);
             IndexVersion++;
-            OnAssetsImported?.Invoke(new[] { entry.Path });
+            OnAssetsImported?.Invoke([entry.Path]);
 
             // Sub-asset thumbnails regenerate from their objects. One not loaded now is queued when it next loads.
-            foreach (var sub in entry.SubAssets)
+            foreach (SubAssetEntry sub in entry.SubAssets)
                 if (AssetDatabase.TryGetExisting(sub.Guid, out Asset subAsset) && subAsset.IsLoaded)
                     ThumbnailGenerator.Enqueue(sub.Guid, subAsset, null);
         }
@@ -1816,7 +1817,7 @@ public class EditorAssetBackend : AssetBackend
     {
         string ext = Path.GetExtension(absolutePath);
         string importerName = EditorRegistries.GetImporterTypeName(ext);
-        var meta = MetaFile.EnsureMeta(absolutePath, importerName);
+        MetaFileData meta = MetaFile.EnsureMeta(absolutePath, importerName);
 
         if (!_guidToEntry.ContainsKey(meta.Guid))
         {
@@ -1835,7 +1836,7 @@ public class EditorAssetBackend : AssetBackend
             _guidToEntry[meta.Guid].NeedsReimport = true;
         }
 
-        var existingEntry = _guidToEntry[meta.Guid];
+        AssetEntry existingEntry = _guidToEntry[meta.Guid];
         if (!toImport.Contains(existingEntry))
             toImport.Add(existingEntry);
     }
@@ -1852,7 +1853,7 @@ public class EditorAssetBackend : AssetBackend
     {
         if (_watcher == null) return;
 
-        var events = _watcher.DrainEvents(force);
+        List<FileEvent> events = _watcher.DrainEvents(force);
         if (events.Count == 0) return;
 
         var imported = new List<string>();
@@ -1862,7 +1863,7 @@ public class EditorAssetBackend : AssetBackend
         // Two passes, matching what startup already does (ScanAssets before ImportDirty). Registering
         // the whole batch first means a file's importer sees every other file in the batch as a
         // tracked asset it can reference, instead of depending on which watcher event arrived first.
-        foreach (var evt in events)
+        foreach (FileEvent evt in events)
         {
             // One bad file (unreadable .meta, broken importer) must not drop the rest of this batch of
             // events on the floor - those changes would never be seen again until a full rescan.
@@ -1870,7 +1871,7 @@ public class EditorAssetBackend : AssetBackend
             catch (Exception ex) { Runtime.Debug.LogError($"Failed to process change to '{evt.Path}': {ex.Message}"); }
         }
 
-        foreach (var entry in toImport)
+        foreach (AssetEntry entry in toImport)
         {
             try { ImportRegisteredChange(entry, imported); }
             catch (Exception ex) { Runtime.Debug.LogError($"Failed to import '{entry.Path}': {ex.Message}"); }
@@ -1880,8 +1881,8 @@ public class EditorAssetBackend : AssetBackend
         {
             MetadataCache.Save(_project.MetadataDbPath, _guidToEntry.Values);
             IndexVersion++;
-            if (imported.Count > 0) OnAssetsImported?.Invoke(imported.ToArray());
-            if (deleted.Count > 0) OnAssetsDeleted?.Invoke(deleted.ToArray());
+            if (imported.Count > 0) OnAssetsImported?.Invoke([.. imported]);
+            if (deleted.Count > 0) OnAssetsDeleted?.Invoke([.. deleted]);
         }
     }
 
@@ -1922,9 +1923,9 @@ public class EditorAssetBackend : AssetBackend
 
             case FileEventType.Deleted:
                 {
-                    if (_pathToGuid.TryGetValue(relativePath, out var guid))
+                    if (_pathToGuid.TryGetValue(relativePath, out Guid guid))
                     {
-                        var deletedEntry = _guidToEntry.GetValueOrDefault(guid);
+                        AssetEntry? deletedEntry = _guidToEntry.GetValueOrDefault(guid);
 
                         AssetDatabase.MarkMissing(guid);
                         if (deletedEntry != null)
@@ -1959,7 +1960,7 @@ public class EditorAssetBackend : AssetBackend
                         if (AffectsCompilation(oldRelative) || AffectsCompilation(relativePath))
                             ScriptAssemblyManager.RequestRecompile();
 
-                        if (!_pathToGuid.TryGetValue(oldRelative, out var guid))
+                        if (!_pathToGuid.TryGetValue(oldRelative, out Guid guid))
                         {
                             // The old path was never tracked e.g. the "write-to-temp-then-rename-
                             // into-place" atomic-save pattern collapses Created+Renamed within the
@@ -1972,7 +1973,7 @@ public class EditorAssetBackend : AssetBackend
                         {
                             _pathToGuid.TryRemove(oldRelative, out _);
                             _pathToGuid[relativePath] = guid;
-                            var renamedEntry = _guidToEntry[guid];
+                            AssetEntry renamedEntry = _guidToEntry[guid];
                             renamedEntry.Path = relativePath;
 
                             // Move .meta
@@ -2083,9 +2084,9 @@ public class EditorAssetBackend : AssetBackend
     /// </summary>
     public bool EnsureCacheUpToDate(Guid guid)
     {
-        Guid parentGuid = _subAssetIndex.TryGetValue(guid, out var subInfo) ? subInfo.parentGuid : guid;
+        Guid parentGuid = _subAssetIndex.TryGetValue(guid, out (Guid parentGuid, int index) subInfo) ? subInfo.parentGuid : guid;
 
-        var entry = GetEntry(parentGuid);
+        AssetEntry? entry = GetEntry(parentGuid);
         if (entry == null) return false;
 
         bool cacheMissing = !File.Exists(GetCachePath(guid)) || !File.Exists(GetCachePath(parentGuid));
@@ -2113,7 +2114,7 @@ public class EditorAssetBackend : AssetBackend
     private void RemoveSubAssets(AssetEntry entry, bool includeThumbnails)
     {
         if (entry.SubAssets == null) return;
-        foreach (var sub in entry.SubAssets)
+        foreach (SubAssetEntry sub in entry.SubAssets)
             RemoveSubAsset(sub.Guid, includeThumbnails);
     }
 
@@ -2126,7 +2127,7 @@ public class EditorAssetBackend : AssetBackend
             main.Name = Path.GetFileNameWithoutExtension(entry.Path);
         }
 
-        foreach (var sub in entry.SubAssets)
+        foreach (SubAssetEntry sub in entry.SubAssets)
             if (AssetDatabase.TryGetExisting(sub.Guid, out Asset subAsset))
                 subAsset.SetPath($"{entry.Path}#{sub.Name}");
     }
@@ -2134,7 +2135,7 @@ public class EditorAssetBackend : AssetBackend
     private void RebuildSubAssetIndex()
     {
         _subAssetIndex.Clear();
-        foreach (var entry in _guidToEntry.Values)
+        foreach (AssetEntry entry in _guidToEntry.Values)
         {
             if (entry.SubAssets == null) continue;
             for (int i = 0; i < entry.SubAssets.Length; i++)

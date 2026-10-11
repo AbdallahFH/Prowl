@@ -17,7 +17,7 @@ public class EditorIcons
     public const string FontIconFileNameFAR = "fa-regular-400.ttf";
     public const string FontIconFileNameFAS = "fa-solid-900.ttf";
 
-    private static readonly Dictionary<int, string> _iconCache = new Dictionary<int, string>();
+    private static readonly Dictionary<int, string> _iconCache = [];
 
     internal static string GetRandomIcon(int seed)
     {
@@ -28,22 +28,21 @@ public class EditorIcons
         var random = new Random(seed);
 
         // Use Reflection to get all public static fields
-        var fields = typeof(EditorIcons).GetFields(BindingFlags.Public | BindingFlags.Static)
+        FieldInfo[] fields = [.. typeof(EditorIcons).GetFields(BindingFlags.Public | BindingFlags.Static)
             // Filter only unicode character fields (icons)
             .Where(field =>
                 field.FieldType == typeof(string) &&
                 !field.Name.StartsWith("FontIcon") &&
                 !field.Name.StartsWith("IconMin") &&
-                !field.Name.StartsWith("IconMax"))
-            .ToArray();
+                !field.Name.StartsWith("IconMax"))];
 
         if (fields.Length == 0)
         {
             return string.Empty;
         }
 
-        var randomField = fields[random.Next(fields.Length)];
-        var randomIcon = randomField.GetValue(null)?.ToString() ?? string.Empty;
+        FieldInfo randomField = fields[random.Next(fields.Length)];
+        string randomIcon = randomField.GetValue(null)?.ToString() ?? string.Empty;
         _iconCache[seed] = randomIcon;
         return randomIcon;
     }

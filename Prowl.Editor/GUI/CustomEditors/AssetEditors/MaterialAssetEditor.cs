@@ -13,6 +13,7 @@ using Prowl.PaperUI;
 using Prowl.PaperUI.LayoutEngine;
 using Prowl.Rosetta;
 using Prowl.Runtime;
+using Prowl.Runtime.Rendering.Shaders;
 using Prowl.Runtime.Resources;
 
 using PropertyGridUtils = Prowl.Editor.GUI.PropertyGridUtils;
@@ -24,7 +25,7 @@ public class MaterialAssetEditor : AssetImporterEditor
 
     // Materials with edits not yet written to disk, keyed by asset GUID. Static rather than
     // per-instance to have a behaviour more coherent with user expectations
-    private static readonly Dictionary<Guid, (Material Material, AssetEntry Entry)> _pending = new();
+    private static readonly Dictionary<Guid, (Material Material, AssetEntry Entry)> _pending = [];
 
     /// <summary>Used only to reach the instance members from the global save hook.</summary>
     private static readonly MaterialAssetEditor s_saveHook = new();
@@ -95,12 +96,12 @@ public class MaterialAssetEditor : AssetImporterEditor
         // are read live from the shader for non-overridden entries (see
         // DrawShaderProperty), so changes to defaults in the shader graph propagate
         // immediately no SyncShaderDefaults call needed.
-        var shader = material.Shader;
+        Shader? shader = material.Shader;
         if (shader != null)
         {
             Origami.Header(paper, $"{id}_h_props", "Properties").Underline().Show();
 
-            foreach (var prop in shader.Properties)
+            foreach (ShaderProperty prop in shader.Properties)
             {
                 MaterialPropertyDrawer.DrawPropertyRow(paper, $"{id}_p_{prop.Name}", material, prop,
                     onChanged: () => MarkDirty(material, entry));
@@ -132,7 +133,7 @@ public class MaterialAssetEditor : AssetImporterEditor
 
     private void DrawShaderPicker(Paper paper, string id, Material material, AssetEntry entry)
     {
-        var font = EditorTheme.DefaultFont;
+        Scribe.FontFile? font = EditorTheme.DefaultFont;
         Guid ownerGuid = entry.Guid;
 
         EditorGUI.Row(paper, $"{id}_shader", "Shader", () =>
@@ -141,7 +142,7 @@ public class MaterialAssetEditor : AssetImporterEditor
             Guid current = material.Shader is { } shader ? shader.AssetID : Guid.Empty;
             string label = EditorAssetBackend.Instance?.GetShaderMenuPath(current, none) ?? none;
 
-            var trigger = paper.Row($"{id}_shader_btn")
+            ElementBuilder trigger = paper.Row($"{id}_shader_btn")
                 .Height(EditorTheme.RowHeight)
                 .Rounded(EditorTheme.Roundness)
                 .BackgroundColor(EditorTheme.Ink100)
@@ -152,7 +153,7 @@ public class MaterialAssetEditor : AssetImporterEditor
 
             using (trigger.Enter())
             {
-                var trigHandle = paper.CurrentParent;
+                ElementHandle trigHandle = paper.CurrentParent;
 
                 if (font != null)
                 {
@@ -204,9 +205,7 @@ public class MaterialAssetEditor : AssetImporterEditor
 
         _shaderPickerOwner = owner;
         _shaderMenu.Reset();
-        _shaderEntries = (EditorAssetBackend.Instance?.GetShaderCatalog() ?? [])
-            .Select(s => MenuTreeEntry.FromPath(s.MenuPath, s.IsBuiltIn ? EditorIcons.Cube : EditorIcons.FileCode, s.Guid))
-            .ToList();
+        _shaderEntries = [.. (EditorAssetBackend.Instance?.GetShaderCatalog() ?? []).Select(s => MenuTreeEntry.FromPath(s.MenuPath, s.IsBuiltIn ? EditorIcons.Cube : EditorIcons.FileCode, s.Guid))];
     }
 
     private static void CloseShaderPicker() => _shaderPickerOwner = Guid.Empty;
@@ -225,14 +224,14 @@ public class MaterialAssetEditor : AssetImporterEditor
     {
         if (_pending.Count == 0) return null;
 
-        var db = EditorAssetBackend.Instance;
+        EditorAssetBackend? db = EditorAssetBackend.Instance;
         if (db == null || Project.Current == null) return null;
 
         var names = new List<string>();
 
-        foreach (var (guid, pending) in _pending.ToArray())
+        foreach ((Guid guid, (Material Material, AssetEntry Entry) pending) in _pending.ToArray())
         {
-            var (material, entry) = pending;
+            (Material? material, AssetEntry? entry) = pending;
 
             // Pending edits that can never be written- drop them instead.
             if (material.IsNotValid() || !ReferenceEquals(db.GetEntry(entry.Guid), entry))

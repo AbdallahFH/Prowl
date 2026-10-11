@@ -68,7 +68,7 @@ public class SDFGeneratorTests(ITestOutputHelper output)
 
     private void Check(Mesh mesh, Func<Float3, bool> inside, Int3 size, Float3 origin, float cell)
     {
-        var surface = SDFGenerator.Surface.From(mesh)!;
+        SDFGenerator.Surface surface = SDFGenerator.Surface.From(mesh)!;
         float[] field = SDFGenerator.ComputeDistances(surface, origin, cell, size);
 
         // Away from the surface a voxel can miss its true closest triangle for one a little further, so a distance may
@@ -113,9 +113,9 @@ public class SDFGeneratorTests(ITestOutputHelper output)
     {
         Mesh left = Mesh.CreateCube(new Float3(1f, 2f, 1f));
         Mesh right = Mesh.CreateCube(new Float3(1f, 0.6f, 2f));
-        var vertices = left.Vertices!.Select(v => v + new Float3(-1f, 0f, 0f))
-            .Concat(right.Vertices!.Select(v => v + new Float3(1f, -0.5f, 0.3f))).ToArray();
-        var indices = left.Indices!.Concat(right.Indices!.Select(i => i + (uint)left.Vertices!.Length)).ToArray();
+        Float3[] vertices = [.. left.Vertices!.Select(v => v + new Float3(-1f, 0f, 0f))
+, .. right.Vertices!.Select(v => v + new Float3(1f, -0.5f, 0.3f))];
+        uint[] indices = [.. left.Indices!, .. right.Indices!.Select(i => i + (uint)left.Vertices!.Length)];
         var both = new Mesh { Vertices = vertices, Indices = indices };
 
         bool Inside(Float3 p) =>
@@ -130,7 +130,7 @@ public class SDFGeneratorTests(ITestOutputHelper output)
     public void FlippedTriangles_ChangeNothing()
     {
         Mesh cube = Mesh.CreateCube(Float3.One);
-        uint[] indices = cube.Indices!.ToArray();
+        uint[] indices = [.. cube.Indices!];
         for (int i = 0; i + 2 < indices.Length; i += 6)
             (indices[i + 1], indices[i + 2]) = (indices[i + 2], indices[i + 1]);
         Check(new Mesh { Vertices = cube.Vertices, Indices = indices }, InsideUnitCube, 24, 1.2f);
@@ -148,9 +148,9 @@ public class SDFGeneratorTests(ITestOutputHelper output)
             bool top = v[indices[i]].Y > 0.49f && v[indices[i + 1]].Y > 0.49f && v[indices[i + 2]].Y > 0.49f;
             if (!top) kept.AddRange([indices[i], indices[i + 1], indices[i + 2]]);
         }
-        var open = new Mesh { Vertices = v, Indices = kept.ToArray() };
+        var open = new Mesh { Vertices = v, Indices = [.. kept] };
 
-        var surface = SDFGenerator.Surface.From(open)!;
+        SDFGenerator.Surface surface = SDFGenerator.Surface.From(open)!;
         int res = 24;
         Float3 origin = new(-1.2f);
         float cell = 2.4f / res;
@@ -174,7 +174,7 @@ public class SDFGeneratorTests(ITestOutputHelper output)
             Vertices = [new(-1f, 0f, -1f), new(1f, 0f, -1f), new(1f, 0f, 1f), new(-1f, 0f, 1f)],
             Indices = [0, 2, 1, 0, 3, 2],
         };
-        var surface = SDFGenerator.Surface.From(quad)!;
+        SDFGenerator.Surface surface = SDFGenerator.Surface.From(quad)!;
         float[] field = SDFGenerator.ComputeDistances(surface, new Float3(-1.5f), 3f / 20, new Int3(20, 20, 20));
         Assert.DoesNotContain(field, value => value < 0f);
     }

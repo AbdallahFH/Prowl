@@ -10,8 +10,8 @@ namespace Prowl.Editor;
 /// </summary>
 public class DependencyGraph
 {
-    private readonly Dictionary<Guid, HashSet<Guid>> _forward = new();
-    private readonly Dictionary<Guid, HashSet<Guid>> _reverse = new();
+    private readonly Dictionary<Guid, HashSet<Guid>> _forward = [];
+    private readonly Dictionary<Guid, HashSet<Guid>> _reverse = [];
     private readonly object _lock = new();
 
     /// <summary> Sets the dependencies for the specified asset, replacing any existing dependencies. </summary>
@@ -23,9 +23,9 @@ public class DependencyGraph
     private void SetDependenciesLocked(Guid asset, IEnumerable<Guid> dependencies)
     {
         // Remove old reverse links
-        if (_forward.TryGetValue(asset, out var oldDeps))
+        if (_forward.TryGetValue(asset, out HashSet<Guid>? oldDeps))
         {
-            foreach (var dep in oldDeps)
+            foreach (Guid dep in oldDeps)
                 _reverse.GetValueOrDefault(dep)?.Remove(asset);
         }
 
@@ -34,11 +34,11 @@ public class DependencyGraph
         _forward[asset] = depSet;
 
         // Build reverse links
-        foreach (var dep in depSet)
+        foreach (Guid dep in depSet)
         {
-            if (!_reverse.TryGetValue(dep, out var dependents))
+            if (!_reverse.TryGetValue(dep, out HashSet<Guid>? dependents))
             {
-                dependents = new HashSet<Guid>();
+                dependents = [];
                 _reverse[dep] = dependents;
             }
             dependents.Add(asset);
@@ -58,29 +58,29 @@ public class DependencyGraph
 
     private void RemoveAssetLocked(Guid asset)
     {
-        if (_forward.Remove(asset, out var deps))
+        if (_forward.Remove(asset, out HashSet<Guid>? deps))
         {
-            foreach (var dep in deps)
+            foreach (Guid dep in deps)
             {
-                if (_reverse.TryGetValue(dep, out var dependents) && dependents.Remove(asset) && dependents.Count == 0)
+                if (_reverse.TryGetValue(dep, out HashSet<Guid>? dependents) && dependents.Remove(asset) && dependents.Count == 0)
                     _reverse.Remove(dep);
             }
         }
 
-        if (_reverse.TryGetValue(asset, out var stillReferencing) && stillReferencing.Count == 0)
+        if (_reverse.TryGetValue(asset, out HashSet<Guid>? stillReferencing) && stillReferencing.Count == 0)
             _reverse.Remove(asset);
     }
 
     /// <summary> Returns the set of assets that the given asset directly depends on. </summary>
     public IReadOnlySet<Guid> GetDependencies(Guid asset)
     {
-        lock (_lock) return _forward.TryGetValue(asset, out var deps) ? new HashSet<Guid>(deps) : new HashSet<Guid>();
+        lock (_lock) return _forward.TryGetValue(asset, out HashSet<Guid>? deps) ? new HashSet<Guid>(deps) : [];
     }
 
     /// <summary> Returns the set of assets that directly depend on the given asset. </summary>
     public IReadOnlySet<Guid> GetDependents(Guid asset)
     {
-        lock (_lock) return _reverse.TryGetValue(asset, out var dependents) ? new HashSet<Guid>(dependents) : new HashSet<Guid>();
+        lock (_lock) return _reverse.TryGetValue(asset, out HashSet<Guid>? dependents) ? new HashSet<Guid>(dependents) : [];
     }
 
     /// <summary>Get all assets that transitively depend on the given roots.</summary>
@@ -101,10 +101,10 @@ public class DependencyGraph
         var queue = new Queue<Guid>(roots);
         while (queue.Count > 0)
         {
-            var current = queue.Dequeue();
+            Guid current = queue.Dequeue();
             if (!visited.Add(current)) continue;
-            if (edges.TryGetValue(current, out var next))
-                foreach (var guid in next)
+            if (edges.TryGetValue(current, out HashSet<Guid>? next))
+                foreach (Guid guid in next)
                     queue.Enqueue(guid);
         }
         return visited;

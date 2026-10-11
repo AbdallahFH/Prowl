@@ -97,15 +97,15 @@ public sealed class SceneReferenceResolver : IExternalReferenceResolver
         foreach (GameObject root in roots)
             if (root.IsValid())
                 Collect(root);
-        return new SceneReferenceResolver(objects.ToArray());
+        return new SceneReferenceResolver([.. objects]);
 
         void Collect(GameObject go)
         {
             objects.Add(go);
             objects.Add(go.Transform);
-            foreach (var component in go.GetComponents<Component>())
+            foreach (Component component in go.GetComponents<Component>())
                 objects.Add(component);
-            foreach (var child in go.Children)
+            foreach (GameObject child in go.Children)
                 Collect(child);
         }
     }

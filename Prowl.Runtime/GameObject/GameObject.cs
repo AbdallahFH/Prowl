@@ -175,11 +175,6 @@ public partial class GameObject : EngineObject, ISerializable
     /// <summary>Overrides without creating a link for an object that has none.</summary>
     public bool HasPrefabOverrides => _prefabLink is { Overrides.Count: > 0 };
 
-    /// <summary>The identifier of the component in the prefab that <paramref name="component"/> came
-    /// from, or Guid.Empty when it is not part of the prefab. The component itself holds this; the
-    /// method stays because callers read it while walking an object's components.</summary>
-    public Guid GetComponentSourceIdentifier(Component component) => component.SourceIdentifier;
-
     /// <summary>Clear all prefab tracking data on this GameObject and its components.</summary>
     internal void ClearPrefabData()
     {
@@ -193,7 +188,7 @@ public partial class GameObject : EngineObject, ISerializable
     internal void ClearPrefabDataRecursive()
     {
         ClearPrefabData();
-        foreach (var child in Children)
+        foreach (GameObject child in Children)
             child.ClearPrefabDataRecursive();
     }
 
@@ -414,7 +409,7 @@ public partial class GameObject : EngineObject, ISerializable
     /// </summary>
     /// <param name="otherTag">The tag to search for.</param>
     /// <returns>An array of GameObjects with the given tag.</returns>
-    public GameObject[] FindGameObjectsWithTag(string otherTag) => Scene.IsValid() ? Scene.AllObjects.Where(gameObject => gameObject.CompareTag(otherTag)).ToArray() : [];
+    public GameObject[] FindGameObjectsWithTag(string otherTag) => Scene.IsValid() ? [.. Scene.AllObjects.Where(gameObject => gameObject.CompareTag(otherTag))] : [];
 
 
     /// <summary>
@@ -784,7 +779,7 @@ public partial class GameObject : EngineObject, ISerializable
     {
         ArgumentNullException.ThrowIfNull(component, nameof(component));
 
-        if (!Application.IsPlaying && IsPrefabInstance && GetComponentSourceIdentifier(component) != Guid.Empty)
+        if (!Application.IsPlaying && IsPrefabInstance && component.SourceIdentifier != Guid.Empty)
         {
             Debug.LogWarning($"[Prefab] '{component.GetType().Name}' on '{Name}' comes from a prefab, " +
                 "so removing it means breaking the connection to that prefab first.");
@@ -915,12 +910,12 @@ public partial class GameObject : EngineObject, ISerializable
         // it triggers) can add or remove components while walking the result. Component counts are
         // small enough that the copy costs less than the crash it prevents.
         if (type == typeof(Component))
-            return _components.ToArray();
+            return [.. _components];
 
         if (_componentCache.TryGetValue(type, out IReadOnlyCollection<Component>? components))
-            return components.ToArray();
+            return [.. components];
 
-        return _components.Where(comp => comp.GetType().IsAssignableTo(type)).ToArray();
+        return [.. _components.Where(comp => comp.GetType().IsAssignableTo(type))];
     }
 
     /// <summary>
@@ -1209,7 +1204,7 @@ public partial class GameObject : EngineObject, ISerializable
         Debug.Log(sb.ToString());
     }
 
-    private void PrintRecursive(GameObject obj, System.Text.StringBuilder sb, string indent, bool isRoot)
+    private static void PrintRecursive(GameObject obj, System.Text.StringBuilder sb, string indent, bool isRoot)
     {
         // Print GameObject info
         string enabledIndicator = obj.Enabled ? "" : " [DISABLED]";
@@ -1262,14 +1257,14 @@ public partial class GameObject : EngineObject, ISerializable
     public override void OnValidate()
     {
         base.OnValidate();
-        var targets = GetComponentsInChildren<Component>();
-        foreach (var target in targets)
+        IEnumerable<Component> targets = GetComponentsInChildren<Component>();
+        foreach (Component target in targets)
         {
             target.OnValidate();
         }
     }
 
-    private string FormatVector(Float3 v)
+    private static string FormatVector(Float3 v)
     {
         return $"({v.X:F2}, {v.Y:F2}, {v.Z:F2})";
     }
@@ -1338,7 +1333,7 @@ public partial class GameObject : EngineObject, ISerializable
         HideFlags = (HideFlags)(value["HideFlags"]?.IntValue ?? 0);
 
         // Absent for an ordinary GameObject, which then allocates nothing for it.
-        _prefabLink = value.TryGet("Prefab", out var linkTag)
+        _prefabLink = value.TryGet("Prefab", out EchoObject? linkTag)
             ? Serializer.Deserialize<PrefabLink>(linkTag, ctx)
             : null;
 
@@ -1457,6 +1452,8 @@ public partial class GameObject : EngineObject, ISerializable
     /// does not pull in required components, since the object being copied already has whatever it needs. Null when
     /// the type's constructor throws, so one bad component is skipped rather than abandoning the whole copy.
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2067:DynamicallyAccessedMembers",
+        Justification = "Component types keep their parameterless constructor by contract.")]
     internal Component? AttachBareComponent(Type type)
     {
         if (!TryConstruct(type, out Component? component) || component is null)
@@ -1521,7 +1518,7 @@ public partial class GameObject : EngineObject, ISerializable
             if (!ctx.idToObject.ContainsKey(refId) && typeTag != null
                 && !string.IsNullOrWhiteSpace(typeTag.StringValue) && RuntimeUtils.FindType(typeTag.StringValue) != null)
             {
-                try { Serializer.Deserialize(node, typeof(object), ctx); return; }
+                try { Serializer.Deserialize<object>(node, ctx); return; }
                 catch (Exception ex) { Debug.LogWarning($"Failed to recover a reference trapped in a missing component on '{Name}': {ex.Message}"); }
             }
         }
@@ -1539,6 +1536,7 @@ public partial class GameObject : EngineObject, ISerializable
     /// </summary>
     /// <param name="compTag">The SerializedProperty containing the component data.</param>
     /// <param name="ctx">The serialization context.</param>
+    /// <param name="existing">Components already loaded onto this object, so the recovered one is not added twice.</param>
     [UnconditionalSuppressMessage("Trimming", "IL2026:RequiresUnreferencedCode",
         Justification = "Recovery path: looks up a previously-missing component type by its serialized name. User game types must be preserved by the consuming application's trim configuration.")]
     private void HandleMissingComponent(EchoObject compTag, SerializationContext ctx, HashSet<object> existing)
@@ -1549,7 +1547,7 @@ public partial class GameObject : EngineObject, ISerializable
         // Recovered when its type exists again, otherwise it stays missing so the data survives another save.
         Component? component = missing!.ComponentData != null ? TryRecoverComponent(missing.ComponentData) : null;
         if (component.IsValid())
-            component!.LoadedIdentifier = missing.LoadedIdentifier;
+            component!._loadedIdentifier = missing._loadedIdentifier;
         else
             component = missing;
 

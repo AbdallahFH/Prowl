@@ -53,7 +53,7 @@ public static class ProjectLauncher
 
     // Cycled tip strip drawn at the bottom of the launcher background.
     private static readonly string[] _tipKeys =
-    {
+    [
         "launcher.tip.orbit",
         "launcher.tip.dolly",
         "launcher.tip.pan",
@@ -79,14 +79,14 @@ public static class ProjectLauncher
         "launcher.tip.component_menu",
         "launcher.tip.escape_unlock",
         "launcher.tip.nuget",
-    };
+    ];
 
     private const float _tipDuration = 8f;
     private const float _tipFadeTime = 0.45f;
     private static int _tipIndex;
     private static float _tipTimer;
 
-    private static readonly Dictionary<string, string> _versions = new();
+    private static readonly Dictionary<string, string> _versions = [];
 
     /// <summary> Sets the default new-project path and resets the launcher to its initial state. </summary>
     public static void Initialize()
@@ -123,7 +123,7 @@ public static class ProjectLauncher
     public static void Draw(Paper paper, float dt, bool forceDraw = false)
     {
         if (!IsOpen && !forceDraw) return;
-        var font = EditorTheme.DefaultFont;
+        Scribe.FontFile? font = EditorTheme.DefaultFont;
         if (font == null) return;
 
         _animTime += dt;
@@ -157,7 +157,7 @@ public static class ProjectLauncher
     // ---- Header (brand + tab pills) ---------------------------------
     private static void Header(Paper P, Scribe.FontFile font)
     {
-        var display = EditorTheme.FontDisplay ?? EditorTheme.DefaultBoldFont ?? font;
+        Scribe.FontFile display = EditorTheme.FontDisplay ?? EditorTheme.DefaultBoldFont ?? font;
 
         using (P.Row("pl_header").Height(64).Padding(26, 26, 0, 0).Enter())
         {
@@ -189,7 +189,7 @@ public static class ProjectLauncher
         int cur = LocaleHelper.GetIndex(EditorSettings.Instance.Locale);
         var globe = new FontIcon(font, EditorIcons.Globe);
 
-        var items = new int[LocaleHelper.Codes.Length];
+        int[] items = new int[LocaleHelper.Codes.Length];
         for (int i = 0; i < items.Length; i++) items[i] = i;
 
         Origami.Dropdown<int>(P, "pl_lang", cur, LocaleHelper.SetLocale, items)
@@ -267,7 +267,7 @@ public static class ProjectLauncher
                 }
             }
 
-            var entries = RecentProjects.FavoritesFirst();
+            List<RecentProjectEntry> entries = RecentProjects.FavoritesFirst();
             bool searching = !string.IsNullOrWhiteSpace(_search);
             if (searching)
             {
@@ -294,7 +294,7 @@ public static class ProjectLauncher
     private static void Card(Paper P, Scribe.FontFile font, RecentProjectEntry entry, int i)
     {
         bool exists = Directory.Exists(entry.Path);
-        var mono = EditorTheme.FontMono ?? font;
+        Scribe.FontFile mono = EditorTheme.FontMono ?? font;
 
         using (P.Row("pl_card" + i).Height(70).Rounded(M.ContainerRounding)
             .BackgroundColor(CardBg).BorderColor(EditorTheme.BorderSoft).BorderWidth(1)
@@ -567,7 +567,7 @@ public static class ProjectLauncher
     {
         if (globalAlpha <= 0f) return;
 
-        var font = EditorTheme.DefaultFont;
+        Scribe.FontFile? font = EditorTheme.DefaultFont;
         if (font == null) return;
 
         float w = paper.ScreenRect.Size.X;
@@ -581,9 +581,9 @@ public static class ProjectLauncher
         float fadeOut = Math.Min((_tipDuration - _tipTimer) / _tipFadeTime, 1f);
         float alpha = Math.Clamp(Math.Min(fadeIn, fadeOut), 0f, 1f) * Math.Clamp(globalAlpha, 0f, 1f);
 
-        var iconBase = EditorTheme.Purple500;
-        var textBase = EditorTheme.Ink400;
-        var labelBase = EditorTheme.Ink300;
+        Color iconBase = EditorTheme.Purple500;
+        Color textBase = EditorTheme.Ink400;
+        Color labelBase = EditorTheme.Ink300;
         var iconColor = Color.FromArgb((int)(iconBase.A * alpha), iconBase.R, iconBase.G, iconBase.B);
         var textColor = Color.FromArgb((int)(textBase.A * alpha), textBase.R, textBase.G, textBase.B);
         var labelColor = Color.FromArgb((int)(labelBase.A * alpha), labelBase.R, labelBase.G, labelBase.B);
@@ -714,7 +714,7 @@ public static class ProjectLauncher
 
     private static string FormatTimeAgo(DateTime utcTime)
     {
-        var span = DateTime.UtcNow - utcTime;
+        TimeSpan span = DateTime.UtcNow - utcTime;
         if (span.TotalMinutes < 1) return Loc.Get("launcher.just_now");
         if (span.TotalHours < 1) return Loc.Get("launcher.minutes_ago", new { count = (int)span.TotalMinutes });
         if (span.TotalDays < 1) return Loc.Get("launcher.hours_ago", new { count = (int)span.TotalHours });

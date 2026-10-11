@@ -15,7 +15,7 @@ public class TerrainQuadtree
     public TerrainChunk Root;
     public int MaxLODLevel;
     public float ChunkSize;
-    public List<TerrainChunk> VisibleChunks = new();
+    public List<TerrainChunk> VisibleChunks = [];
 
     public TerrainQuadtree(Float3 origin, float terrainSize, int maxLOD)
     {
@@ -52,7 +52,7 @@ public class TerrainQuadtree
             if (chunk.Children == null)
                 chunk.Subdivide();
 
-            foreach (var child in chunk.Children)
+            foreach (TerrainChunk child in chunk.Children)
                 UpdateNode(child, cameraPosition, lodQuality);
         }
         else
@@ -66,7 +66,7 @@ public class TerrainQuadtree
                 else
                 {
                     // Still within hysteresis range - keep children
-                    foreach (var child in chunk.Children)
+                    foreach (TerrainChunk child in chunk.Children)
                         UpdateNode(child, cameraPosition, lodQuality);
                     return;
                 }

@@ -47,9 +47,9 @@ public class ColorRamp
         if (index == PrimaryIndex)
             return ParseHex(Primary);
 
-        var p = ParseHex(Primary);
+        Color p = ParseHex(Primary);
         if (index >= Offsets.Length) return p;
-        var o = Offsets[index];
+        (int R, int G, int B) o = Offsets[index];
         return Color.FromArgb(255,
             Math.Clamp(p.R + o.R, 0, 255),
             Math.Clamp(p.G + o.G, 0, 255),
@@ -61,7 +61,7 @@ public class ColorRamp
     {
         StopCount = stopCount;
         PrimaryIndex = primaryIndex;
-        var pc = defaults[primaryIndex];
+        Color pc = defaults[primaryIndex];
         Offsets = new (int, int, int)[stopCount];
         for (int i = 0; i < stopCount; i++)
             Offsets[i] = (defaults[i].R - pc.R, defaults[i].G - pc.G, defaults[i].B - pc.B);
@@ -244,8 +244,8 @@ public class EditorThemeData
     /// <summary> Creates a deep clone of this theme data. </summary>
     public EditorThemeData Clone()
     {
-        var json = JsonSerializer.Serialize(this);
-        var clone = JsonSerializer.Deserialize<EditorThemeData>(json)!;
+        string json = JsonSerializer.Serialize(this);
+        EditorThemeData clone = JsonSerializer.Deserialize<EditorThemeData>(json)!;
         clone.InitRamps();
         return clone;
     }
@@ -253,7 +253,7 @@ public class EditorThemeData
     /// <summary> Serializes this theme to a JSON file at the given path. </summary>
     public void ExportToFile(string path)
     {
-        var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+        string json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(path, json);
     }
 
@@ -262,8 +262,8 @@ public class EditorThemeData
     {
         try
         {
-            var json = File.ReadAllText(path);
-            var data = JsonSerializer.Deserialize<EditorThemeData>(json);
+            string json = File.ReadAllText(path);
+            EditorThemeData? data = JsonSerializer.Deserialize<EditorThemeData>(json);
             data?.InitRamps();
             return data;
         }

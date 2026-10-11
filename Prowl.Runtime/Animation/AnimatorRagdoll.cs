@@ -61,7 +61,7 @@ internal sealed class AnimatorRagdoll
     private readonly MotionSkeleton _skeleton;
     private readonly HumanoidRig? _rig;
     private readonly int[] _partOfBone;
-    private readonly HashSet<Rigidbody3D> _bodies = new();
+    private readonly HashSet<Rigidbody3D> _bodies = [];
     private Part[] _parts = Array.Empty<Part>();
     private int[] _parentsFirst = Array.Empty<int>();
     private float _builtMass;
@@ -151,7 +151,7 @@ internal sealed class AnimatorRagdoll
             _partOfBone[index] = parts.Count;
             parts.Add(new Part { Body = body, Bone = bones[bone], BoneIndex = index });
         }
-        _parts = parts.ToArray();
+        _parts = [.. parts];
         for (int i = 0; i < _parts.Length; i++)
             _parts[i].Parent = ParentPart(_skeleton, _partOfBone, _parts[i].BoneIndex);
         for (int i = 0; i < _parts.Length; i++)
@@ -516,7 +516,7 @@ internal sealed class AnimatorRagdoll
         for (int i = 0; i < _parts.Length; i++)
             for (int p = i; p >= 0; p = _parts[p].Parent)
                 if (p == joint) { beyond.Add(i); break; }
-        return beyond.ToArray();
+        return [.. beyond];
     }
 
     // Two parts collide only while they are apart both in the animation and in the simulation.
@@ -537,7 +537,7 @@ internal sealed class AnimatorRagdoll
                 if (_pairCollides[a, b] == apart) continue;
 
                 _pairCollides[a, b] = apart;
-                (apart ? enable ??= new() : ignore ??= new()).Add((first.Body, second.Body));
+                (apart ? enable ??= [] : ignore ??= []).Add((first.Body, second.Body));
             }
         }
         if (enable != null) _physics!.EnableCollisionsBetween(enable);
@@ -574,8 +574,8 @@ internal sealed class AnimatorRagdoll
 
     private int[] ParentsFirst()
     {
-        var order = new int[_parts.Length];
-        var depth = new int[_parts.Length];
+        int[] order = new int[_parts.Length];
+        int[] depth = new int[_parts.Length];
         for (int i = 0; i < _parts.Length; i++)
         {
             order[i] = i;

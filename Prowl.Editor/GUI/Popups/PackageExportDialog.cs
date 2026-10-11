@@ -22,9 +22,9 @@ namespace Prowl.Editor.GUI.Popups;
 public static class PackageExportDialog
 {
     private static readonly ModalHandle _handle = new();
-    private static List<string> _explicitPaths = new();    // user-selected assets
-    private static HashSet<string> _dependencyPaths = new(); // auto-resolved dependencies
-    private static HashSet<string> _enabledPaths = new();
+    private static List<string> _explicitPaths = [];    // user-selected assets
+    private static HashSet<string> _dependencyPaths = []; // auto-resolved dependencies
+    private static HashSet<string> _enabledPaths = [];
     private static bool _includeDependencies = true;
     private static bool _lastIncludeDependencies = true; // track toggle changes
     private static bool _includeProjectSettings;
@@ -39,16 +39,15 @@ public static class PackageExportDialog
     /// <summary> Opens the export overlay dialog with the given asset paths, resolving dependencies and rebuilding the file tree. </summary>
     public static void Open(List<string> selectedAssetPaths)
     {
-        _explicitPaths = selectedAssetPaths
+        _explicitPaths = [.. selectedAssetPaths
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)];
         _includeDependencies = true;
         _lastIncludeDependencies = true;
         _includeProjectSettings = false;
 
         // Default output path
-        var project = Project.Current;
+        Project? project = Project.Current;
         if (project != null)
             _outputPath = Path.Combine(project.PackagesPath, project.Name + ".prowlpackage");
 
@@ -72,7 +71,7 @@ public static class PackageExportDialog
     {
         _dependencyPaths.Clear();
 
-        var db = EditorAssetBackend.Instance;
+        EditorAssetBackend? db = EditorAssetBackend.Instance;
         if (db == null) return;
 
         var explicitSet = new HashSet<string>(_explicitPaths, StringComparer.OrdinalIgnoreCase);
@@ -84,10 +83,10 @@ public static class PackageExportDialog
             string path = queue.Dequeue();
             if (!visited.Add(path)) continue;
 
-            var entry = db.GetEntry(path);
+            AssetEntry? entry = db.GetEntry(path);
             if (entry?.Dependencies == null) continue;
 
-            foreach (var depGuid in entry.Dependencies)
+            foreach (Guid depGuid in entry.Dependencies)
             {
                 string? depPath = db.GuidToPathIncludingSubAssets(depGuid);
                 if (depPath == null || visited.Contains(depPath)) continue;
@@ -111,10 +110,9 @@ public static class PackageExportDialog
         if (_includeDependencies)
             allPaths.AddRange(_dependencyPaths);
 
-        allPaths = allPaths
+        allPaths = [.. allPaths
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)];
 
         // Reset enabled: all on by default
         _enabledPaths = new HashSet<string>(allPaths, StringComparer.OrdinalIgnoreCase);
@@ -127,7 +125,7 @@ public static class PackageExportDialog
     private static void DrawInternal(Paper paper, int layer)
     {
         if (!_handle.IsOpen) return;
-        var font = EditorTheme.DefaultFont;
+        Scribe.FontFile? font = EditorTheme.DefaultFont;
         if (font == null) return;
 
         if (_includeDependencies != _lastIncludeDependencies)
@@ -184,7 +182,7 @@ public static class PackageExportDialog
     {
         float treeHeight = DialogHeight - 32 - 90 - 60; // title - options - bottom bar
 
-        var nodes = BuildFlatNodeList();
+        List<TreeNode> nodes = BuildFlatNodeList();
 
         Origami.Tree(paper, "pkgexp_tree", DialogWidth - 16, treeHeight)
             .Nodes(nodes)
@@ -228,10 +226,9 @@ public static class PackageExportDialog
         if (_includeDependencies)
             allPaths.AddRange(_dependencyPaths);
 
-        allPaths = allPaths
+        allPaths = [.. allPaths
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)];
 
         // Collect all unique folder paths and file entries
         var folderSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -254,7 +251,7 @@ public static class PackageExportDialog
         {
             string parent = Path.GetDirectoryName(folder)?.Replace('\\', '/') ?? "";
             if (!childFolders.ContainsKey(parent))
-                childFolders[parent] = new List<string>();
+                childFolders[parent] = [];
             childFolders[parent].Add(folder);
         }
 
@@ -262,7 +259,7 @@ public static class PackageExportDialog
         {
             string parent = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "";
             if (!childFiles.ContainsKey(parent))
-                childFiles[parent] = new List<string>();
+                childFiles[parent] = [];
             childFiles[parent].Add(path);
         }
 
@@ -271,7 +268,7 @@ public static class PackageExportDialog
         void EmitChildren(string parentKey, int depth)
         {
             // Emit folders first, sorted
-            if (childFolders.TryGetValue(parentKey, out var folders))
+            if (childFolders.TryGetValue(parentKey, out List<string>? folders))
             {
                 folders.Sort(StringComparer.OrdinalIgnoreCase);
                 foreach (string folderPath in folders)
@@ -300,7 +297,7 @@ public static class PackageExportDialog
             }
 
             // Then files, sorted
-            if (childFiles.TryGetValue(parentKey, out var files))
+            if (childFiles.TryGetValue(parentKey, out List<string>? files))
             {
                 files.Sort(StringComparer.OrdinalIgnoreCase);
                 foreach (string filePath in files)
@@ -331,7 +328,7 @@ public static class PackageExportDialog
 
         void CheckDescendants(string folderPath, ref bool allChecked, ref bool anyChecked)
         {
-            if (childFiles.TryGetValue(folderPath, out var files))
+            if (childFiles.TryGetValue(folderPath, out List<string>? files))
             {
                 foreach (string f in files)
                 {
@@ -339,7 +336,7 @@ public static class PackageExportDialog
                     else allChecked = false;
                 }
             }
-            if (childFolders.TryGetValue(folderPath, out var folders))
+            if (childFolders.TryGetValue(folderPath, out List<string>? folders))
             {
                 foreach (string sub in folders)
                     CheckDescendants(sub, ref allChecked, ref anyChecked);
@@ -395,8 +392,8 @@ public static class PackageExportDialog
                             }
                         },
                         startPath: Path.GetDirectoryName(_outputPath),
-                        filters: new[] { "*.prowlpackage" },
-                        filterLabels: new[] { Loc.Get("editor.filter_package") });
+                        filters: ["*.prowlpackage"],
+                        filterLabels: [Loc.Get("editor.filter_package")]);
                     }).Width(30).Show();
             }
         }

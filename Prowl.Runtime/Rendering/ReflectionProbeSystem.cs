@@ -41,7 +41,7 @@ internal sealed class ReflectionProbeSystem : IDisposable
         public readonly Float4[] Record = new Float4[TexelsPerProbe];
     }
 
-    private readonly List<Slot> _slots = new();
+    private readonly List<Slot> _slots = [];
     private readonly Dictionary<ReflectionProbe, Slot> _bySlot = new(ReferenceEqualityComparer.Instance);
     private readonly Stack<int> _freeLayers = new();
     private int _nextLayer = SkyLayer + 1;
@@ -240,6 +240,7 @@ internal sealed class ReflectionProbeSystem : IDisposable
     private void RefreshTable()
     {
         int count = 0;
+        Span<Float4> record = stackalloc Float4[TexelsPerProbe];
         foreach (Slot slot in _slots)
         {
             if (!slot.Captured) continue;
@@ -250,7 +251,6 @@ internal sealed class ReflectionProbeSystem : IDisposable
             Float3 x = rotation * Float3.UnitX, y = rotation * Float3.UnitY, z = rotation * Float3.UnitZ;
             float volume = 8f * half.X * half.Y * half.Z;
 
-            Span<Float4> record = stackalloc Float4[TexelsPerProbe];
             record[0] = new Float4(x, -Float3.Dot(x, center));
             record[1] = new Float4(y, -Float3.Dot(y, center));
             record[2] = new Float4(z, -Float3.Dot(z, center));
@@ -454,7 +454,7 @@ internal static class ReflectionProbeCapture
         using var target = new Cubemap((uint)resolution, mipChain: true);
         Prefilter(target, 0, mips);
 
-        var faces = new byte[6 * mips][];
+        byte[][] faces = new byte[6 * mips][];
         for (int face = 0; face < 6; face++)
             for (int mip = 0; mip < mips; mip++)
             {

@@ -51,7 +51,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
     /// <summary>
     /// The currently active scene. There is always one: reading this before anything has been loaded
     /// creates an empty scene, so the engine is never in a no-scene state and callers never have to
-    /// handle null. Use <see cref="Load"/> to replace it.
+    /// handle null. Use <see cref="Load(Scene)"/> to replace it.
     /// </summary>
     public static Scene Current
     {
@@ -79,7 +79,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
     /// </summary>
     internal static bool EndSessionOnSwap;
 
-    /// <summary>Whether a <see cref="Load"/> is queued and has not been applied yet, so <see cref="Current"/>
+    /// <summary>Whether a <see cref="Load(Scene)"/> is queued and has not been applied yet, so <see cref="Current"/>
     /// is still the outgoing scene.</summary>
     public static bool IsLoadPending => _pendingScene != null;
 
@@ -222,7 +222,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
     }
 
     /// <summary>
-    /// Applies a queued <see cref="Load"/>. Driven once per frame by the game loop, right after the
+    /// Applies a queued <see cref="Load(Scene)"/>. Driven once per frame by the game loop, right after the
     /// destroy queue. Nothing is mid-callback at that point, so the outgoing scene is disposed
     /// outright rather than queued for another frame.
     /// </summary>
@@ -327,7 +327,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
     private GameObject[] serializeObj = null;
 
     [SerializeIgnore]
-    private List<GameObject> _allObj = new();
+    private List<GameObject> _allObj = [];
     [SerializeIgnore]
     private HashSet<GameObject> _allObjSet = new(ReferenceEqualityComparer.Instance);
 
@@ -357,11 +357,11 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
 
     /// <summary>The enabled canvases in this scene, each added by its own OnEnable and removed by its OnDisable.</summary>
     [SerializeIgnore, NotHeld]
-    internal readonly List<GameCanvas> Canvases = new();
+    internal readonly List<GameCanvas> Canvases = [];
 
     /// <summary>The enabled volumetric clouds in this scene. The first one is drawn.</summary>
     [SerializeIgnore, NotHeld]
-    internal readonly List<VolumetricClouds> Clouds = new();
+    internal readonly List<VolumetricClouds> Clouds = [];
 
     /// <summary>This scene's reflection probes, and the sky probe surfaces outside them reflect.</summary>
     [SerializeIgnore, NotHeld]
@@ -493,14 +493,14 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
     public sealed class BakedLightingData
     {
         /// <summary>Baked lightmap atlas pages (RGBM-encoded). A placement below selects one.</summary>
-        public List<Texture2D> Lightmaps = new();
+        public List<Texture2D> Lightmaps = [];
 
         /// <summary>
         /// Where each baked renderer landed in the atlas, keyed by the identifier of the object it is on.
         /// Here rather than on the renderer because it belongs to this scene's bake and to nothing else,
         /// which is also what stops a prefab instance reading as modified the moment it is baked.
         /// </summary>
-        public Dictionary<Guid, LightmapPlacement> Placements = new();
+        public Dictionary<Guid, LightmapPlacement> Placements = [];
         /// <summary>World-space light-probe positions.</summary>
         public Float3[] ProbePositions = [];
         /// <summary>Baked SH per probe, indexed with <see cref="ProbePositions"/>.</summary>
@@ -647,7 +647,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
     {
         EnsureNotDisposed();
         MainThreadContext.AssertMainThread();
-        using var session = MainThreadContext.EnterSession();
+        using MainThreadContext.SessionScope session = MainThreadContext.EnterSession();
         if (_isActive) return; // already enabled, nothing to deliver
 
         _isActive = true;
@@ -662,7 +662,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
 
             if (go.EnabledInHierarchy)
             {
-                var components = go.GetComponents<Component>();
+                IEnumerable<Component> components = go.GetComponents<Component>();
                 foreach (Component component in components)
                 {
                     if (component.IsDisposed) continue;
@@ -681,7 +681,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
     {
         EnsureNotDisposed();
         MainThreadContext.AssertOwner(this);
-        using var session = MainThreadContext.EnterSession();
+        using MainThreadContext.SessionScope session = MainThreadContext.EnterSession();
         if (!_isActive) return; // already disabled, nothing to deliver
 
         // Create a copy to avoid collection modification during enumeration
@@ -694,7 +694,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
 
             if (go.EnabledInHierarchy)
             {
-                var components = go.GetComponents<Component>();
+                IEnumerable<Component> components = go.GetComponents<Component>();
                 foreach (Component component in components)
                 {
                     if (component.IsDisposed) continue;
@@ -751,7 +751,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
         EnsureNotDisposed();
         if (obj.Scene != this || obj.Parent.IsValid()) return -1;
         int rootIdx = 0;
-        foreach (var go in _allObj)
+        foreach (GameObject go in _allObj)
         {
             if (go.IsDisposed || go.Transform.Parent != null) continue;
             if (go == obj) return rootIdx;
@@ -852,7 +852,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
             _allObj.Add(obj);
             obj.Scene = this;
 
-            var components = obj.GetComponents<Component>();
+            IEnumerable<Component> components = obj.GetComponents<Component>();
 
             // Call OnAddedToScene for all components
             foreach (Component component in components)
@@ -890,7 +890,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
         if (_allObjSet.Remove(obj))
         {
             _allObj.Remove(obj);
-            var components = obj.GetComponents<Component>();
+            IEnumerable<Component> components = obj.GetComponents<Component>();
 
             // Call OnDisable for currently enabled components (only if scene is active)
             if (IsActive && obj.EnabledInHierarchy)
@@ -1046,8 +1046,8 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
                 obj.SetIdentifier(obj.LoadedIdentifier);
 
             foreach (Component comp in obj.GetComponents<Component>())
-                if (comp.LoadedIdentifier != Guid.Empty)
-                    comp.Identifier = comp.LoadedIdentifier;
+                if (comp._loadedIdentifier != Guid.Empty)
+                    comp.Identifier = comp._loadedIdentifier;
         }
 
         foreach (GameObject obj in serializeObj)
@@ -1063,7 +1063,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
     public void Update()
     {
         if (IsDisposed) return;
-        using var session = MainThreadContext.EnterSession();
+        using MainThreadContext.SessionScope session = MainThreadContext.EnterSession();
         _dispatcher.RunStart();
 
         // Navigation (crowd steering) advances on the variable update, before component Updates
@@ -1091,7 +1091,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
     public void FixedUpdate()
     {
         if (IsDisposed) return;
-        using var session = MainThreadContext.EnterSession();
+        using MainThreadContext.SessionScope session = MainThreadContext.EnterSession();
         // Start must run before a component's first FixedUpdate. The loop runs FixedUpdate before
         // Update, so drive Start here too (RunStart is idempotent - it only starts un-started ones).
         _dispatcher.RunStart();
@@ -1114,7 +1114,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
     public void CollectRenderables(Camera camera, List<IRenderable> renderables, List<IRenderableLight> lights)
     {
         if (IsDisposed) return;
-        using var session = MainThreadContext.EnterSession();
+        using MainThreadContext.SessionScope session = MainThreadContext.EnterSession();
         StaticGeometry.Collect(this, renderables);
         _dispatcher.RunRenderCollect(camera, renderables, lights);
     }
@@ -1125,7 +1125,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
     public void DrawGizmos()
     {
         if (IsDisposed) return;
-        using var session = MainThreadContext.EnterSession();
+        using MainThreadContext.SessionScope session = MainThreadContext.EnterSession();
         _dispatcher.RunDrawGizmos();
 
         Flush();
@@ -1138,7 +1138,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
     public void OnGui(Paper paper)
     {
         if (IsDisposed) return;
-        using var session = MainThreadContext.EnterSession();
+        using MainThreadContext.SessionScope session = MainThreadContext.EnterSession();
         _dispatcher.RunOnGui(paper);
 
         Flush();
@@ -1217,7 +1217,7 @@ public class Scene : EngineObject, ISerializationCallbackReceiver
             // other cameras or the whole frame. Contain it and keep rendering the rest.
             try
             {
-                var camPipeline = cam.Pipeline;
+                RenderPipeline? camPipeline = cam.Pipeline;
                 RenderPipeline pipeline = camPipeline.IsValid() ? camPipeline : DefaultRenderPipeline.Default;
 
                 // A camera with its own Target asset draws there; everything else draws into `target`

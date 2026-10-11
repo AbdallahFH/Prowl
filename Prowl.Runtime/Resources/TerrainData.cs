@@ -372,7 +372,7 @@ public sealed class TerrainData : Asset, ISerializable
     public float GetSteepness(float u, float v)
     {
         EnsureLoaded();
-        var normal = GetInterpolatedNormal(u, v);
+        Float3 normal = GetInterpolatedNormal(u, v);
         // Angle between normal and up vector
         return MathF.Acos(Maths.Clamp(normal.Y, -1f, 1f)) * (180f / MathF.PI);
     }
@@ -423,7 +423,7 @@ public sealed class TerrainData : Asset, ISerializable
 
     private static byte[] ResampleNearest(byte[] source, int oldRes, int newRes)
     {
-        var result = new byte[newRes * newRes];
+        byte[] result = new byte[newRes * newRes];
         float scale = (float)oldRes / newRes;
         for (int z = 0; z < newRes; z++)
         {
@@ -469,7 +469,7 @@ public sealed class TerrainData : Asset, ISerializable
         // Rebuild splats removing the channel at index
         int res = SplatmapResolution;
         int pixelCount = res * res;
-        var newSplats = new float[pixelCount * newCount];
+        float[] newSplats = new float[pixelCount * newCount];
         for (int p = 0; p < pixelCount; p++)
         {
             int dst = 0;
@@ -489,7 +489,7 @@ public sealed class TerrainData : Asset, ISerializable
         if (oldSplats == null) return;
         int res = SplatmapResolution;
         int pixelCount = res * res;
-        var newSplats = new float[pixelCount * newCount];
+        float[] newSplats = new float[pixelCount * newCount];
         int copyChannels = Math.Min(oldCount, newCount);
         for (int p = 0; p < pixelCount; p++)
         {
@@ -563,7 +563,7 @@ public sealed class TerrainData : Asset, ISerializable
     {
         EnsureLoaded();
         if (layerIndex < 0 || layerIndex >= DetailLayers.Count) return 0f;
-        var layer = DetailLayers[layerIndex];
+        byte[] layer = DetailLayers[layerIndex];
         if (layer == null || x < 0 || x >= DetailResolution || z < 0 || z >= DetailResolution) return 0f;
         return layer[z * DetailResolution + x] * (1f / 255f);
     }
@@ -572,7 +572,7 @@ public sealed class TerrainData : Asset, ISerializable
     {
         EnsureLoaded();
         if (layerIndex < 0 || layerIndex >= DetailLayers.Count) return;
-        var layer = DetailLayers[layerIndex];
+        byte[] layer = DetailLayers[layerIndex];
         if (layer == null || x < 0 || x >= DetailResolution || z < 0 || z >= DetailResolution) return;
         layer[z * DetailResolution + x] = (byte)MathF.Round(Maths.Clamp(value, 0f, 1f) * 255f);
         _detailsVersion++;
@@ -592,7 +592,7 @@ public sealed class TerrainData : Asset, ISerializable
 
         for (int i = 0; i < DetailLayers.Count; i++)
         {
-            var source = DetailLayers[i];
+            byte[] source = DetailLayers[i];
             DetailLayers[i] = resample && source != null && source.Length == oldRes * oldRes
                 ? Resample(source, oldRes, newRes)
                 : new byte[newRes * newRes];
@@ -604,7 +604,7 @@ public sealed class TerrainData : Asset, ISerializable
     /// <summary>Bilinear resample of a square cell grid, sampling on cell centres.</summary>
     private static byte[] Resample(byte[] source, int oldRes, int newRes)
     {
-        var result = new byte[newRes * newRes];
+        byte[] result = new byte[newRes * newRes];
         if (oldRes == newRes)
         {
             Array.Copy(source, result, result.Length);
@@ -667,7 +667,7 @@ public sealed class TerrainData : Asset, ISerializable
         if (index < 0 || index >= TreePrototypes.Count) return;
         TreePrototypes.RemoveAt(index);
 
-        var trees = Trees;
+        List<TreeInstance> trees = Trees;
         for (int i = trees.Count - 1; i >= 0; i--)
         {
             TreeInstance tree = trees[i];
@@ -747,10 +747,10 @@ public sealed class TerrainData : Asset, ISerializable
         {
             // Dispose old textures
             if (_splatmapTextures != null)
-                foreach (var t in _splatmapTextures) if (t.IsValid()) t.Dispose();
+                foreach (Texture2D t in _splatmapTextures) if (t.IsValid()) t.Dispose();
 
             _splatmapTextures = new List<Texture2D>(texCount);
-            var buffer = new float[pixelCount * 4];
+            float[] buffer = new float[pixelCount * 4];
 
             for (int ti = 0; ti < texCount; ti++)
             {
@@ -799,7 +799,7 @@ public sealed class TerrainData : Asset, ISerializable
             return _detailTextures;
 
         if (_detailTextures != null)
-            foreach (var t in _detailTextures) if (t.IsValid()) t.Dispose();
+            foreach (Texture2D t in _detailTextures) if (t.IsValid()) t.Dispose();
 
         int res = DetailResolution;
         int pixelCount = res * res;
@@ -819,7 +819,7 @@ public sealed class TerrainData : Asset, ISerializable
             for (int c = 0; c < channels; c++)
             {
                 int layerIndex = baseLayer + c;
-                var layer = DetailLayers[layerIndex];
+                byte[] layer = DetailLayers[layerIndex];
 
                 // Empty until proven otherwise, so a missing layer reads as unpainted rather than
                 // as a stale rect left over from whatever occupied the slot before.
@@ -931,9 +931,9 @@ public sealed class TerrainData : Asset, ISerializable
         if (_heightmapTexture.IsValid()) _heightmapTexture.Dispose();
         if (_holesTexture.IsValid()) _holesTexture.Dispose();
         if (_splatmapTextures != null)
-            foreach (var t in _splatmapTextures) if (t.IsValid()) t.Dispose();
+            foreach (Texture2D t in _splatmapTextures) if (t.IsValid()) t.Dispose();
         if (_detailTextures != null)
-            foreach (var t in _detailTextures) if (t.IsValid()) t.Dispose();
+            foreach (Texture2D t in _detailTextures) if (t.IsValid()) t.Dispose();
 
         _heightmapTexture = null;
         _holesTexture = null;
@@ -956,7 +956,7 @@ public sealed class TerrainData : Asset, ISerializable
         var layerList = EchoObject.NewList();
         for (int i = 0; i < Layers.Count; i++)
         {
-            var l = Layers[i];
+            TerrainLayer l = Layers[i];
             var lo = EchoObject.NewCompound();
             lo.Add("Albedo", Serializer.Serialize(l.Albedo, ctx));
             lo.Add("NormalMap", Serializer.Serialize(l.NormalMap, ctx));
@@ -982,13 +982,13 @@ public sealed class TerrainData : Asset, ISerializable
         value.Add("DetailResolution", new EchoObject(DetailResolution));
 
         var detailProtoList = EchoObject.NewList();
-        foreach (var dp in DetailPrototypes)
+        foreach (DetailPrototype dp in DetailPrototypes)
         {
             var dpo = EchoObject.NewCompound();
             dpo.Add("Texture", Serializer.Serialize(dp.Texture, ctx));
             dpo.Add("Mesh", Serializer.Serialize(dp.Mesh, ctx));
             var matList = EchoObject.NewList();
-            foreach (var m in dp.Materials) matList.ListAdd(Serializer.Serialize(m, ctx));
+            foreach (Material? m in dp.Materials) matList.ListAdd(Serializer.Serialize(m, ctx));
             dpo.Add("Materials", matList);
             dpo.Add("RenderMode", new EchoObject((int)dp.RenderMode));
             dpo.Add("MinWidth", new EchoObject(dp.MinWidth));
@@ -1005,18 +1005,18 @@ public sealed class TerrainData : Asset, ISerializable
         value.Add("DetailPrototypes", detailProtoList);
 
         var detailLayersList = EchoObject.NewList();
-        foreach (var dl in DetailLayers)
+        foreach (byte[] dl in DetailLayers)
             detailLayersList.ListAdd(new EchoObject(Convert.ToBase64String(dl ?? [])));
         value.Add("DetailLayers", detailLayersList);
 
         // Trees
         var treeProtoList = EchoObject.NewList();
-        foreach (var tp in TreePrototypes)
+        foreach (TreePrototype tp in TreePrototypes)
         {
             var tpo = EchoObject.NewCompound();
             tpo.Add("Mesh", Serializer.Serialize(tp.Mesh, ctx));
             var matList = EchoObject.NewList();
-            foreach (var m in tp.Materials) matList.ListAdd(Serializer.Serialize(m, ctx));
+            foreach (Material? m in tp.Materials) matList.ListAdd(Serializer.Serialize(m, ctx));
             tpo.Add("Materials", matList);
             tpo.Add("BendFactor", new EchoObject(tp.BendFactor));
             treeProtoList.ListAdd(tpo);
@@ -1024,7 +1024,7 @@ public sealed class TerrainData : Asset, ISerializable
         value.Add("TreePrototypes", treeProtoList);
 
         var treeList = EchoObject.NewList();
-        foreach (var ti in Trees)
+        foreach (TreeInstance ti in Trees)
         {
             var tio = EchoObject.NewCompound();
             tio.Add("PosX", new EchoObject(ti.Position.X));
@@ -1049,13 +1049,13 @@ public sealed class TerrainData : Asset, ISerializable
         Interpolation = (TerrainInterpolation)(value.Get("Interpolation")?.IntValue ?? (int)TerrainInterpolation.Bicubic);
 
         // Layers
-        var layerList = value.Get("Layers");
+        EchoObject? layerList = value.Get("Layers");
         Layers = [];
         if (layerList != null)
         {
             for (int i = 0; i < layerList.List.Count; i++)
             {
-                var lo = layerList.List[i];
+                EchoObject lo = layerList.List[i];
                 Layers.Add(new TerrainLayer
                 {
                     Albedo = Serializer.Deserialize<Texture2D>(lo.Get("Albedo"), ctx),
@@ -1105,7 +1105,7 @@ public sealed class TerrainData : Asset, ISerializable
         Splats = splats ?? CreateDefaultSplats();
 
         // Holes
-        var holesB64 = value.Get("Holes")?.StringValue;
+        string? holesB64 = value.Get("Holes")?.StringValue;
         byte[]? holes = holesB64 != null ? Convert.FromBase64String(holesB64) : null;
         if (holes != null && holes.Length != SplatmapResolution * SplatmapResolution)
         {
@@ -1118,10 +1118,10 @@ public sealed class TerrainData : Asset, ISerializable
         DetailResolution = value.Get("DetailResolution")?.IntValue ?? value.Get("GrassmapResolution")?.IntValue ?? 1024;
 
         DetailPrototypes = [];
-        var dpList = value.Get("DetailPrototypes") ?? value.Get("GrassTypes");
+        EchoObject? dpList = value.Get("DetailPrototypes") ?? value.Get("GrassTypes");
         if (dpList != null)
         {
-            foreach (var dpo in dpList.List)
+            foreach (EchoObject dpo in dpList.List)
             {
                 var dp = new DetailPrototype
                 {
@@ -1142,9 +1142,9 @@ public sealed class TerrainData : Asset, ISerializable
                 if ((dpo.Get("DryColor") ?? dpo.Get("DryTint")) is { } dry)
                     dp.DryColor = Serializer.Deserialize<Color>(dry, ctx);
 
-                var matList = dpo.Get("Materials");
+                EchoObject? matList = dpo.Get("Materials");
                 if (matList != null)
-                    foreach (var mat in matList.List)
+                    foreach (EchoObject mat in matList.List)
                         dp.Materials.Add(Serializer.Deserialize<Material>(mat, ctx));
 
                 DetailPrototypes.Add(dp);
@@ -1154,10 +1154,10 @@ public sealed class TerrainData : Asset, ISerializable
 
         var detailLayers = new List<byte[]>();
         int detailCells = DetailResolution * DetailResolution;
-        var dlList = value.Get("DetailLayers");
+        EchoObject? dlList = value.Get("DetailLayers");
         if (dlList != null)
         {
-            foreach (var dlEntry in dlList.List)
+            foreach (EchoObject dlEntry in dlList.List)
             {
                 byte[] arr = dlEntry?.StringValue != null
                     ? Convert.FromBase64String(dlEntry.StringValue)
@@ -1171,9 +1171,9 @@ public sealed class TerrainData : Asset, ISerializable
 
         // Trees
         TreePrototypes = [];
-        var tpList = value.Get("TreePrototypes");
+        EchoObject? tpList = value.Get("TreePrototypes");
         if (tpList != null)
-            foreach (var tpo in tpList.List)
+            foreach (EchoObject tpo in tpList.List)
             {
                 var tp = new TreePrototype
                 {
@@ -1181,16 +1181,16 @@ public sealed class TerrainData : Asset, ISerializable
                     BendFactor = tpo.Get("BendFactor")?.FloatValue ?? 1f,
                 };
 
-                var matList = tpo.Get("Materials");
+                EchoObject? matList = tpo.Get("Materials");
                 if (matList != null)
                 {
-                    foreach (var mat in matList.List)
+                    foreach (EchoObject mat in matList.List)
                         tp.Materials.Add(Serializer.Deserialize<Material>(mat, ctx));
                 }
                 else
                 {
                     // Back-compat: old single-material field.
-                    var legacy = tpo.Get("Material");
+                    EchoObject? legacy = tpo.Get("Material");
                     if (legacy != null)
                         tp.Materials.Add(Serializer.Deserialize<Material>(legacy, ctx));
                 }
@@ -1199,9 +1199,9 @@ public sealed class TerrainData : Asset, ISerializable
             }
 
         Trees = [];
-        var tiList = value.Get("Trees");
+        EchoObject? tiList = value.Get("Trees");
         if (tiList != null)
-            foreach (var tio in tiList.List)
+            foreach (EchoObject tio in tiList.List)
                 Trees.Add(new TreeInstance
                 {
                     Position = new Float2(tio.Get("PosX")?.FloatValue ?? 0, tio.Get("PosY")?.FloatValue ?? 0),
@@ -1267,7 +1267,7 @@ public sealed class TerrainData : Asset, ISerializable
     private float[] CreateDefaultSplats()
     {
         int lc = LayerCount;
-        var s = new float[SplatmapResolution * SplatmapResolution * lc];
+        float[] s = new float[SplatmapResolution * SplatmapResolution * lc];
         for (int i = 0; i < s.Length; i += lc) s[i] = 1f;
         return s;
     }

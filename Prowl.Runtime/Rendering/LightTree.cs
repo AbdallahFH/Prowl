@@ -164,8 +164,8 @@ internal sealed class LightTreeBuilder
 
         EnsureCapacity(count);
 
-        var rootBounds = LightBounds.Empty;
-        var rootCentroids = LightBounds.Empty;
+        LightBounds rootBounds = LightBounds.Empty;
+        LightBounds rootCentroids = LightBounds.Empty;
         for (int i = 0; i < count; i++)
         {
             Vector4 sphere = spheres[i];
@@ -337,8 +337,8 @@ internal sealed class LightTreeBuilder
             float scale = Bins / span;
             Bin(first, count, axis, min, scale, wide, binBounds, binCounts, binCentroids);
 
-            var right = LightBounds.Empty;
-            var rightCentroid = LightBounds.Empty;
+            LightBounds right = LightBounds.Empty;
+            LightBounds rightCentroid = LightBounds.Empty;
             int rightCount = 0;
             for (int b = Bins - 1; b > 0; b--)
             {
@@ -350,8 +350,8 @@ internal sealed class LightTreeBuilder
                 suffixCount[b] = rightCount;
             }
 
-            var left = LightBounds.Empty;
-            var leftCentroid = LightBounds.Empty;
+            LightBounds left = LightBounds.Empty;
+            LightBounds leftCentroid = LightBounds.Empty;
             int leftCount = 0;
             for (int b = 0; b < Bins - 1; b++)
             {
@@ -408,7 +408,7 @@ internal sealed class LightTreeBuilder
         int chunk = (count + workers - 1) / workers;
         var bounds = new LightBounds[Bins];
         var centroids = new LightBounds[Bins];
-        var counts = new int[Bins];
+        int[] counts = new int[Bins];
         for (int b = 0; b < Bins; b++)
         {
             bounds[b] = LightBounds.Empty;
@@ -472,7 +472,7 @@ internal sealed class LightTreeBuilder
         int axis = split.Axis, bin = split.Bin;
         float min = split.Min, scale = split.Scale;
 
-        var leftCounts = new int[workers];
+        int[] leftCounts = new int[workers];
         Parallel.For(0, workers, w =>
         {
             int start = first + w * chunk;
@@ -483,8 +483,8 @@ internal sealed class LightTreeBuilder
             leftCounts[w] = left;
         });
 
-        var leftOffset = new int[workers];
-        var rightOffset = new int[workers];
+        int[] leftOffset = new int[workers];
+        int[] rightOffset = new int[workers];
         int total = 0;
         for (int w = 0; w < workers; w++)
         {
@@ -631,7 +631,7 @@ internal sealed class LightTreeBuilder
     {
         if (count <= _maxLeafSize || depth >= MaxBinaryDepth)
         {
-            var leaf = LightBounds.Empty;
+            LightBounds leaf = LightBounds.Empty;
             for (int i = first; i < first + count; i++)
                 leaf.Add(_primBounds[_indices[i]]);
             _nodes[nodeIndex] = new BinaryNode { Bounds = leaf, LeftFirst = first, Count = count };
@@ -657,7 +657,7 @@ internal sealed class LightTreeBuilder
             rightBounds = BuildMorton(left + 1, split + 1, count - leftCount, depth + 1);
         }
 
-        var bounds = leftBounds;
+        LightBounds bounds = leftBounds;
         bounds.Add(rightBounds);
         _nodes[nodeIndex] = new BinaryNode { Bounds = bounds, LeftFirst = left, Count = 0 };
         return bounds;
@@ -808,10 +808,10 @@ internal sealed class ForwardLightTrees : IDisposable
     }
 
     private readonly Dictionary<IRenderableLight, Entry> _entries = new(ReferenceEqualityComparer.Instance);
-    private readonly List<Entry> _static = new();
-    private readonly List<Entry> _dynamic = new();
-    private readonly List<Entry> _culled = new();
-    private readonly List<Entry> _gone = new();
+    private readonly List<Entry> _static = [];
+    private readonly List<Entry> _dynamic = [];
+    private readonly List<Entry> _culled = [];
+    private readonly List<Entry> _gone = [];
     private readonly LightTreeBuilder _staticTree = new();
     private readonly LightTreeBuilder _dynamicTree = new();
     private readonly Float4[] _record = new Float4[TexelsPerLight];

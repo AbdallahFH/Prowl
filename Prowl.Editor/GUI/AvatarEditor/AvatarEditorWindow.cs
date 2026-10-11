@@ -36,14 +36,14 @@ public class AvatarEditorWindow : DockPanel
 
     /// <summary>The humanoid bones, grouped the way a person looks for them.</summary>
     private static readonly (string Name, HumanBodyBone[] Bones)[] s_groups =
-    {
+    [
         ("Body", new[] { HumanBodyBone.Hips, HumanBodyBone.Spine, HumanBodyBone.Chest, HumanBodyBone.UpperChest }),
         ("Head", new[] { HumanBodyBone.Neck, HumanBodyBone.Head, HumanBodyBone.LeftEye, HumanBodyBone.RightEye, HumanBodyBone.Jaw }),
         ("Left Arm", new[] { HumanBodyBone.LeftShoulder, HumanBodyBone.LeftUpperArm, HumanBodyBone.LeftLowerArm, HumanBodyBone.LeftHand }),
         ("Right Arm", new[] { HumanBodyBone.RightShoulder, HumanBodyBone.RightUpperArm, HumanBodyBone.RightLowerArm, HumanBodyBone.RightHand }),
         ("Left Leg", new[] { HumanBodyBone.LeftUpperLeg, HumanBodyBone.LeftLowerLeg, HumanBodyBone.LeftFoot, HumanBodyBone.LeftToes }),
         ("Right Leg", new[] { HumanBodyBone.RightUpperLeg, HumanBodyBone.RightLowerLeg, HumanBodyBone.RightFoot, HumanBodyBone.RightToes }),
-    };
+    ];
 
     private Guid _modelGuid;
     private string _modelName = "";
@@ -51,7 +51,7 @@ public class AvatarEditorWindow : DockPanel
     private MotionSkeleton? _skeleton;
 
     /// <summary>Humanoid bone to skeleton bone name. This is what gets written back.</summary>
-    private readonly Dictionary<HumanBodyBone, string> _map = new();
+    private readonly Dictionary<HumanBodyBone, string> _map = [];
 
     /// <summary>Which skeleton bones are worth looking at, for a rig with more of them than fit.</summary>
     private enum BoneView { All, Unmapped, Mapped }
@@ -147,7 +147,7 @@ public class AvatarEditorWindow : DockPanel
 
     private static Runtime.Avatar? FindAvatar(AssetEntry entry)
     {
-        foreach (var sub in entry.SubAssets)
+        foreach (SubAssetEntry sub in entry.SubAssets)
         {
             if (sub.Type == null || !typeof(Runtime.Avatar).IsAssignableFrom(sub.Type)) continue;
             Runtime.Avatar? avatar = AssetDatabase.Get<Runtime.Avatar>(sub.Guid);
@@ -158,9 +158,9 @@ public class AvatarEditorWindow : DockPanel
 
     public override void OnGUI(Paper paper, float width, float height)
     {
-        var font = EditorTheme.DefaultFont;
+        Scribe.FontFile? font = EditorTheme.DefaultFont;
         if (font == null) return;
-        var m = Origami.Current.Metrics;
+        OrigamiMetrics m = Origami.Current.Metrics;
 
         if (_preview == null || _skeleton == null)
         {
@@ -590,7 +590,7 @@ public class AvatarEditorWindow : DockPanel
                 || name.Contains("Ring") || name.Contains("Little"))
                 bones.Add((HumanBodyBone)i);
         }
-        return bones.ToArray();
+        return [.. bones];
     }
 
     /// <summary>"LeftUpperArm" reads better as "Left Upper Arm".</summary>

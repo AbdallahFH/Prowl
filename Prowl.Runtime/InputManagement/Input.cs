@@ -223,8 +223,8 @@ public static class Input
         Current.SetGamepadVibration(gamepadIndex, leftMotor, rightMotor);
     }
 
-    private static readonly Dictionary<int, float> s_vibrationEnds = new();
-    private static readonly List<int> s_expiredVibrations = new();
+    private static readonly Dictionary<int, float> s_vibrationEnds = [];
+    private static readonly List<int> s_expiredVibrations = [];
 
     /// <summary>
     /// Vibrates a gamepad for <paramref name="seconds"/> of real time, then stops it. The stop happens even if
@@ -238,7 +238,7 @@ public static class Input
 
     private static void StopExpiredVibrations()
     {
-        foreach (var (pad, end) in s_vibrationEnds)
+        foreach ((int pad, float end) in s_vibrationEnds)
             if (_currentTime >= end) s_expiredVibrations.Add(pad);
 
         foreach (int pad in s_expiredVibrations)
@@ -327,8 +327,8 @@ public static class Input
     /// </summary>
     public static bool AnyKey => Current.IsAnyKeyDown;
 
-    private static readonly KeyCode[] s_anyKeys = Enum.GetValues<KeyCode>().Distinct().Where(k => k != KeyCode.Unknown).ToArray();
-    private static readonly MouseButton[] s_anyMouseButtons = Enum.GetValues<MouseButton>().Where(b => b != MouseButton.Unknown).ToArray();
+    private static readonly KeyCode[] s_anyKeys = [.. Enum.GetValues<KeyCode>().Distinct().Where(k => k != KeyCode.Unknown)];
+    private static readonly MouseButton[] s_anyMouseButtons = [.. Enum.GetValues<MouseButton>().Where(b => b != MouseButton.Unknown)];
     private static readonly GamepadButton[] s_anyGamepadButtons = Enum.GetValues<GamepadButton>();
 
     /// <summary>
@@ -339,8 +339,8 @@ public static class Input
     {
         get
         {
-            var handler = Current;
-            foreach (var key in s_anyKeys)
+            IInputHandler handler = Current;
+            foreach (KeyCode key in s_anyKeys)
                 if (handler.GetKeyDown(key)) return true;
             return false;
         }
@@ -353,14 +353,14 @@ public static class Input
         {
             if (AnyKeyDown) return true;
 
-            var handler = Current;
-            foreach (var button in s_anyMouseButtons)
+            IInputHandler handler = Current;
+            foreach (MouseButton button in s_anyMouseButtons)
                 if (handler.GetMouseButtonDown((int)button)) return true;
 
             for (int pad = 0; pad < handler.GetGamepadSlotCount(); pad++)
             {
                 if (!handler.IsGamepadConnected(pad)) continue;
-                foreach (var button in s_anyGamepadButtons)
+                foreach (GamepadButton button in s_anyGamepadButtons)
                     if (handler.GetGamepadButtonDown(pad, button)) return true;
             }
             return false;

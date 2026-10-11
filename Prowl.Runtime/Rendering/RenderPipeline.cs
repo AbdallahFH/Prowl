@@ -373,7 +373,7 @@ public abstract class RenderPipeline : EngineObject
     {
         // Sized from the last collect, so a big scene does not regrow its list from empty every frame.
         var renderables = new List<IRenderable>(s_lastCollectCount);
-        List<IRenderableLight> lights = s_lightLists.Count > 0 ? s_lightLists.Pop() : new();
+        List<IRenderableLight> lights = s_lightLists.Count > 0 ? s_lightLists.Pop() : [];
         scene.CollectRenderables(camera, renderables, lights);
         s_lastCollectCount = renderables.Count;
         return (renderables, lights);
@@ -396,6 +396,9 @@ public abstract class RenderPipeline : EngineObject
     /// in every pass into an O(1) array read. The array is pooled and may be longer than
     /// <paramref name="renderables"/>, hand it back with <see cref="ReturnCullResult"/> once done.
     /// </summary>
+    /// <param name="renderables">The renderables to test.</param>
+    /// <param name="worldFrustum">The frustum to test against, or null to skip the frustum test.</param>
+    /// <param name="cullingMask">The layers that are drawn.</param>
     /// <param name="alreadyCulled">Renderables an earlier, wider test culled, which stay culled without testing again.</param>
     public bool[] CullRenderables(IReadOnlyList<IRenderable> renderables, Frustum? worldFrustum, LayerMask cullingMask, bool[]? alreadyCulled = null)
     {
@@ -487,14 +490,14 @@ public abstract class RenderPipeline : EngineObject
         (a, b) => b.distSq.CompareTo(a.distSq);
 
     // Reused across frames; only one sort is in flight at a time (sequential encode).
-    private readonly List<(IRenderable renderable, float distSq)> _sortPairs = new();
-    private readonly List<IRenderable> _sortResult = new();
+    private readonly List<(IRenderable renderable, float distSq)> _sortPairs = [];
+    private readonly List<IRenderable> _sortResult = [];
 
     // DrawRenderables scratch, reused across passes (encode is sequential, never re-entrant).
-    private readonly List<RenderBatch> _batches = new();
-    private readonly Dictionary<(ulong, int, Mesh), int> _batchLookup = new();
-    private readonly List<List<int>> _indexListPool = new();
-    private readonly List<int> _lastBatches = new();
+    private readonly List<RenderBatch> _batches = [];
+    private readonly Dictionary<(ulong, int, Mesh), int> _batchLookup = [];
+    private readonly List<List<int>> _indexListPool = [];
+    private readonly List<int> _lastBatches = [];
     private int _indexListRented;
 
     // Per-frame world-space AABB cache shared by the main cull and every shadow cascade cull, so each
@@ -548,7 +551,7 @@ public abstract class RenderPipeline : EngineObject
         }
         else
         {
-            list = new List<int>();
+            list = [];
             _indexListPool.Add(list);
         }
         _indexListRented++;
@@ -570,7 +573,7 @@ public abstract class RenderPipeline : EngineObject
             if (culledRenderableIndices != null && culledRenderableIndices[i])
                 continue;
 
-            var renderable = renderables[i];
+            IRenderable renderable = renderables[i];
             float distSq = Float3.DistanceSquared(renderable.GetPosition(), cameraPosition);
             _sortPairs.Add((renderable, distSq));
         }
@@ -702,6 +705,12 @@ public abstract class RenderPipeline : EngineObject
     /// <param name="cmd">CommandBuffer the batches encode into. The caller is responsible
     /// for binding the target framebuffer + viewport before calling this method, and
     /// for submitting the buffer after.</param>
+    /// <param name="renderables">The renderables to draw.</param>
+    /// <param name="shaderTag">The shader tag the pass is selected by.</param>
+    /// <param name="tagValue">The value the shader tag must have.</param>
+    /// <param name="viewer">The view the batches are drawn for.</param>
+    /// <param name="culledRenderableIndices">Per index culled mask from <see cref="CullRenderables"/>.</param>
+    /// <param name="updatePreviousMatrices">Store the current matrices as the previous ones for motion vectors.</param>
     /// <param name="currentRT">Currently bound color render target, used for the
     /// GrabTexture handshake (read FB for the blit-into-grab-RT). Pass null if no
     /// pass in this batch will request a grab texture.</param>
@@ -819,7 +828,7 @@ public abstract class RenderPipeline : EngineObject
 
                 // Found matching pass - add to appropriate batch
                 // Batch key: (material hash, pass index, mesh) ensures each pass gets its own batch
-                var batchKey = (materialHash, passIndex, mesh);
+                (ulong materialHash, int passIndex, Mesh mesh) batchKey = (materialHash, passIndex, mesh);
                 if (batchLookup.TryGetValue(batchKey, out int batchIndex) && (!preserveOrder || batchIndex == batches.Count - 1))
                 {
                     // Batch already exists - add this object to it
@@ -1010,7 +1019,7 @@ public abstract class RenderPipeline : EngineObject
 
                 if (subIdx >= 0 && subIdx < subMeshCount)
                 {
-                    var sub = mesh.GetSubMesh(subIdx);
+                    SubMeshDescriptor sub = mesh.GetSubMesh(subIdx);
                     cmd.DrawIndexed(vao, sub.Topology, (uint)sub.IndexCount, (uint)sub.IndexStart, 0, i32);
                 }
                 else
@@ -1033,7 +1042,7 @@ public abstract class RenderPipeline : EngineObject
         }
     }
 
-    private readonly List<IndexRange> _ranges = new();
+    private readonly List<IndexRange> _ranges = [];
 
     // Draws the run of index range renderables from members[first] that share its properties as one draw, and
     // returns the position of the last one drawn
@@ -1143,7 +1152,7 @@ public abstract class RenderPipeline : EngineObject
         int subIdx = renderable.GetSubMeshIndex();
         if (subIdx >= 0 && subIdx < mesh.SubMeshCount)
         {
-            var sub = mesh.GetSubMesh(subIdx);
+            SubMeshDescriptor sub = mesh.GetSubMesh(subIdx);
             cmd.DrawIndexedInstanced(vao, sub.Topology, (uint)sub.IndexCount, (uint)instanceCount, (uint)sub.IndexStart, 0, useIndex32);
         }
         else

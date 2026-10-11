@@ -41,7 +41,7 @@ public static class PrefabEditingMode
 
     // Every scene a session has built, so one can still be recognized after the session that made it
     // ended. A prefab and its editor-only rig is not a scene anyone means to save over their own.
-    private static readonly ConditionalWeakTable<Scene, object> _editScenes = new();
+    private static readonly ConditionalWeakTable<Scene, object> _editScenes = [];
 
     /// <summary>Whether <paramref name="scene"/> was built to edit a prefab in, rather than opened as a scene.</summary>
     public static bool IsPrefabEditScene(Scene? scene) => scene != null && _editScenes.TryGetValue(scene, out _);
@@ -86,17 +86,17 @@ public static class PrefabEditingMode
     {
         if (Scene.IsLoadPending)
         {
-            Action? onLoaded = null;
-            onLoaded = () =>
+            void onLoaded()
             {
                 Scene.OnSceneLoaded -= onLoaded;
                 EnterInternal(prefabGuid);
-            };
+            }
+
             Scene.OnSceneLoaded += onLoaded;
             return;
         }
 
-        var prefab = PrefabUtility.LoadPrefab(prefabGuid);
+        PrefabAsset? prefab = PrefabUtility.LoadPrefab(prefabGuid);
         if (prefab == null)
         {
             Debug.LogWarning("[Prefab] Cannot edit prefab asset not found.");
@@ -111,13 +111,13 @@ public static class PrefabEditingMode
             return;
         }
 
-        var db = EditorAssetBackend.Instance;
-        var entry = db?.GetEntry(prefabGuid);
+        EditorAssetBackend? db = EditorAssetBackend.Instance;
+        AssetEntry? entry = db?.GetEntry(prefabGuid);
         EditingPrefabPath = entry?.Path;
 
         // Save current scene. Reconciled first: the session ends by restoring this snapshot and
         // refreshing its instances, which would otherwise drop any edit nothing had recorded yet.
-        var currentScene = Scene.Current;
+        Scene currentScene = Scene.Current;
         if (currentScene != null)
         {
             PrefabUtility.ReconcileOpenScene();
@@ -165,7 +165,7 @@ public static class PrefabEditingMode
         camGo.HideFlags = HideFlags.HideAndDontSave | HideFlags.NoGizmos;
         camGo.Transform.Position = FramingPositionFor(go);
         camGo.Transform.LocalEulerAngles = new Float3(15, 0, 0);
-        var cam = camGo.AddComponent<Camera>();
+        Camera cam = camGo.AddComponent<Camera>();
         cam.Depth = -1;
         cam.HDR = true;
         editScene.Add(camGo);
@@ -173,7 +173,7 @@ public static class PrefabEditingMode
         var lightGo = new GameObject("PrefabEdit Light");
         lightGo.HideFlags = HideFlags.HideAndDontSave | HideFlags.NoGizmos;
         lightGo.Transform.LocalEulerAngles = new Float3(45, 225, 0);
-        var light = lightGo.AddComponent<DirectionalLight>();
+        DirectionalLight light = lightGo.AddComponent<DirectionalLight>();
         light.Intensity = 1f;
         editScene.Add(lightGo);
 
@@ -221,7 +221,7 @@ public static class PrefabEditingMode
             return false;
         }
 
-        var scene = Scene.Current;
+        Scene scene = Scene.Current;
         if (scene == null) return false;
 
         // The tracked prefab root, and only that: it is what skips the editor-only camera and light.
@@ -250,8 +250,8 @@ public static class PrefabEditingMode
 
         // Serialize to .prefab file. The editor-only camera and light live in this scene too, so
         // anything the prefab references outside itself is linked rather than copied into the asset.
-        var writeContext = PrefabUtility.TreeValueContext(root);
-        var echo = Serializer.Serialize(typeof(object), root, writeContext);
+        SerializationContext writeContext = PrefabUtility.TreeValueContext(root);
+        EchoObject echo = Serializer.Serialize(typeof(object), root, writeContext);
         if (echo == null) return false;
 
         PrefabUtility.ReportDroppedSceneReferences(writeContext, "Saving this prefab");
@@ -293,18 +293,18 @@ public static class PrefabEditingMode
         }
 
         Save();
-        var prefabGuid = EditingPrefabGuid;
+        Guid prefabGuid = EditingPrefabGuid;
 
         // Restore original scene
         bool restored = RestoreScene();
 
         // The restore only queues the swap, so refresh instances once that scene is actually current.
-        Action? onLoaded = null;
-        onLoaded = () =>
+        void onLoaded()
         {
             Scene.OnSceneLoaded -= onLoaded;
             PrefabUtility.RefreshAllInstances(prefabGuid);
-        };
+        }
+
         Scene.OnSceneLoaded += onLoaded;
 
         Cleanup(restored);
@@ -351,7 +351,7 @@ public static class PrefabEditingMode
     {
         if (_savedSceneState != null)
         {
-            var restoredScene = Serializer.Deserialize<Scene>(_savedSceneState);
+            Scene? restoredScene = Serializer.Deserialize<Scene>(_savedSceneState);
             if (restoredScene != null)
             {
                 Scene.Load(restoredScene);

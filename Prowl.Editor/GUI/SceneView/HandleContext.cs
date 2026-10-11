@@ -40,7 +40,7 @@ public sealed class HandleContext
     /// </summary>
     public const float DepthTieBandPixels = 4f;
 
-    private readonly Dictionary<ControlID, Float2> _dragOrigin = new();
+    private readonly Dictionary<ControlID, Float2> _dragOrigin = [];
 
     private ControlID _nearest;
     private ControlID _pendingNearest;
@@ -147,7 +147,7 @@ public sealed class HandleContext
         ViewportHovered = viewportHovered;
 
         _viewProjection = camera.ProjectionMatrix * camera.ViewMatrix;
-        var camTransform = camera.GameObject.Transform;
+        Transform camTransform = camera.GameObject.Transform;
         _camPosition = camTransform.Position;
         _camForward = camTransform.Forward;
         MouseRay = camera.ScreenPointToRay(mouseLocal, ViewportSize);

@@ -25,7 +25,7 @@ public class MeshRenderer : Component, IMaterialRenderer
     public Mesh? Mesh;
 
     /// <summary>Materials array one per submesh. Legacy single-material meshes use index 0.</summary>
-    public List<Material> Materials = new();
+    public List<Material> Materials = [];
 
     /// <summary>Legacy single-material accessor. Gets/sets Materials[0].</summary>
     public Material? Material
@@ -58,7 +58,7 @@ public class MeshRenderer : Component, IMaterialRenderer
     public override void OnRenderCollect(Camera camera, List<IRenderable> renderables, List<IRenderableLight> lights)
     {
         // Something still loading is skipped this frame rather than waited on.
-        var mesh = Mesh;
+        Mesh? mesh = Mesh;
         if (mesh is not { IsLoaded: true } || Materials.Count == 0) return;
 
         StaticGeometry.Source? batched = StaticSource;
@@ -121,7 +121,7 @@ public class MeshRenderer : Component, IMaterialRenderer
     public bool Raycast(Ray worldRay, out float distance)
     {
         distance = float.MaxValue;
-        var mesh = Mesh;
+        Mesh? mesh = Mesh;
         if (mesh is not { IsLoaded: true }) return false;
 
         Float4x4 worldToLocal = Transform.WorldToLocalMatrix;

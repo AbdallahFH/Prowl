@@ -66,7 +66,7 @@ public static class Undo
         {
             if (ComponentIdentifier != Guid.Empty)
                 return FindComponentByIdentifier(ComponentIdentifier);
-            if (FallbackRef != null && FallbackRef.TryGetTarget(out var fallback))
+            if (FallbackRef != null && FallbackRef.TryGetTarget(out object? fallback))
             {
                 if (fallback is EngineObject eo && eo.IsDisposed) return null;
                 return fallback;
@@ -77,7 +77,7 @@ public static class Undo
         private void RestoreState(MemoryCopy copy)
         {
             EchoObject state = copy.Data;
-            var target = ResolveTarget();
+            object? target = ResolveTarget();
             if (target == null) return;
 
             // An asset is refilled whole, so everything derived from it sees the change.
@@ -142,21 +142,21 @@ public static class Undo
     //  State
     // ================================================================
 
-    private static readonly List<UndoStep> _undoStack = new();
-    private static readonly List<UndoStep> _redoStack = new();
+    private static readonly List<UndoStep> _undoStack = [];
+    private static readonly List<UndoStep> _redoStack = [];
 
     // Per-frame pending snapshots: target -> beforeState (captured at start of draw, before any mutations)
-    private static readonly Dictionary<object, MemoryCopy> _pendingSnapshots = new();
+    private static readonly Dictionary<object, MemoryCopy> _pendingSnapshots = [];
 
     // Immediate action records accumulated this frame (RegisterAction calls)
-    private static readonly List<(string description, UndoRecord record)> _pendingActions = new();
+    private static readonly List<(string description, UndoRecord record)> _pendingActions = [];
 
     // Pre-grouped action steps accumulated this frame (RegisterActionGroup calls). Each is ONE undo step
     // holding many records, so editing N selected objects collapses into a single user-visible step.
-    private static readonly List<(UndoStep step, bool coalesce)> _pendingActionGroups = new();
+    private static readonly List<(UndoStep step, bool coalesce)> _pendingActionGroups = [];
 
     // Deferred created/destroy objects serialized at FlushFrame so components added after registration are captured
-    private static readonly List<(GameObject go, string description, bool isCreate)> _pendingStructural = new();
+    private static readonly List<(GameObject go, string description, bool isCreate)> _pendingStructural = [];
 
     // Continuous operation state (gizmo drag) tracks by Identifier, not reference
     private static bool _isContinuous;
@@ -239,8 +239,8 @@ public static class Undo
     public static void RecordGameObjectChange<T>(GameObject go, string description, T oldValue, T newValue, Action<GameObject, T> apply, bool coalesce = false)
     {
         Guid id = go.Identifier;
-        Action undo = () => { var g = FindGO(id); if (g != null) apply(g, oldValue); };
-        Action redo = () => { var g = FindGO(id); if (g != null) apply(g, newValue); };
+        void undo() { GameObject? g = FindGO(id); if (g != null) apply(g, oldValue); }
+        void redo() { GameObject? g = FindGO(id); if (g != null) apply(g, newValue); }
         if (coalesce) RegisterCoalescableAction(description, undo, redo);
         else RegisterAction(description, undo, redo);
     }
@@ -257,7 +257,7 @@ public static class Undo
         // Check if we can coalesce with the top of the undo stack
         if (_pendingActions.Count == 0 && _undoStack.Count > 0)
         {
-            var prev = _undoStack[^1];
+            UndoStep prev = _undoStack[^1];
             if (prev.Description == description
                 && prev.Records.Count == 1
                 && prev.Records[0] is ActionRecord
@@ -287,7 +287,7 @@ public static class Undo
         if (actions == null || actions.Count == 0) return;
 
         var records = new List<UndoRecord>(actions.Count);
-        foreach (var (u, r) in actions) records.Add(new ActionRecord(u, r));
+        foreach ((Action? u, Action? r) in actions) records.Add(new ActionRecord(u, r));
         _pendingActionGroups.Add((new UndoStep(description, records, isCoalescable: false), coalesce));
     }
 
@@ -301,18 +301,18 @@ public static class Undo
     {
         if (Application.IsPlaying)
         {
-            foreach (var go in gos) set(go, newValue);
+            foreach (GameObject go in gos) set(go, newValue);
             return;
         }
 
         var actions = new List<(Action undo, Action redo)>(gos.Count);
-        foreach (var go in gos)
+        foreach (GameObject go in gos)
         {
             Guid id = go.Identifier;
             T oldV = get(go);
             T captured = newValue;
-            actions.Add((() => { var g = FindGO(id); if (g != null) set(g, oldV); },
-                         () => { var g = FindGO(id); if (g != null) set(g, captured); }
+            actions.Add((() => { GameObject? g = FindGO(id); if (g != null) set(g, oldV); },
+                         () => { GameObject? g = FindGO(id); if (g != null) set(g, captured); }
             ));
             set(go, newValue);
         }
@@ -338,7 +338,7 @@ public static class Undo
 
     private static void FlushCreatedObject(GameObject go, string description)
     {
-        var (undo, redo) = CaptureCreatedObject(go);
+        (Action? undo, Action? redo) = CaptureCreatedObject(go);
         _pendingActions.Add((description, new ActionRecord(undo, redo)));
     }
 
@@ -356,17 +356,17 @@ public static class Undo
         // The tree by value, anything it references outside itself linked by identifier: without a resolver
         // Echo would deep copy those scene objects into the snapshot, and undo would restore the object
         // pointing at orphan clones of whatever it referenced.
-        var copy = SceneReferenceResolver.WriteMemoryCopy(go);
-        var goId = go.Identifier;
-        var parentId = go.Parent.IsValid() ? go.Parent.Identifier : Guid.Empty;
-        var siblingIndex = go.Parent != null ? go.Parent.Children.IndexOf(go) : -1;
+        MemoryCopy copy = SceneReferenceResolver.WriteMemoryCopy(go);
+        Guid goId = go.Identifier;
+        Guid parentId = go.Parent.IsValid() ? go.Parent.Identifier : Guid.Empty;
+        int siblingIndex = go.Parent != null ? go.Parent.Children.IndexOf(go) : -1;
 
         return (
             undo: () =>
             {
-                var scene = Scene.Current;
+                Scene scene = Scene.Current;
                 if (scene == null) return;
-                var target = FindGameObjectByIdentifier(scene, goId);
+                GameObject? target = FindGameObjectByIdentifier(scene, goId);
                 if (target == null) return;
 
                 if (Selection.IsSelected(target))
@@ -377,7 +377,7 @@ public static class Undo
             },
             redo: () =>
             {
-                var scene = Scene.Current;
+                Scene scene = Scene.Current;
                 if (scene == null) return;
 
                 // Preserving identifiers: what comes back has to be the object that went away, or
@@ -388,7 +388,7 @@ public static class Undo
                 scene.Add(restored);
                 if (parentId != Guid.Empty)
                 {
-                    var parent = FindGameObjectByIdentifier(scene, parentId);
+                    GameObject? parent = FindGameObjectByIdentifier(scene, parentId);
                     if (parent != null)
                     {
                         restored.SetParent(parent);
@@ -414,15 +414,15 @@ public static class Undo
 
         // Serialize the entire GO tree before destruction
         // Linked, not copied: see CaptureCreatedObject.
-        var copy = SceneReferenceResolver.WriteMemoryCopy(go);
-        var parentId = go.Parent.IsValid() ? go.Parent.Identifier : Guid.Empty;
-        var siblingIndex = go.Parent != null ? go.Parent.Children.IndexOf(go) : -1;
-        var goId = go.Identifier;
+        MemoryCopy copy = SceneReferenceResolver.WriteMemoryCopy(go);
+        Guid parentId = go.Parent.IsValid() ? go.Parent.Identifier : Guid.Empty;
+        int siblingIndex = go.Parent != null ? go.Parent.Children.IndexOf(go) : -1;
+        Guid goId = go.Identifier;
 
         RegisterAction(description,
             undo: () =>
             {
-                var scene = Scene.Current;
+                Scene scene = Scene.Current;
                 if (scene == null) return;
 
                 // Preserving identifiers: what comes back has to be the object that went away, or
@@ -433,7 +433,7 @@ public static class Undo
                 scene.Add(restored);
                 if (parentId != Guid.Empty)
                 {
-                    var parent = FindGameObjectByIdentifier(scene, parentId);
+                    GameObject? parent = FindGameObjectByIdentifier(scene, parentId);
                     if (parent != null)
                     {
                         restored.SetParent(parent);
@@ -447,9 +447,9 @@ public static class Undo
             },
             redo: () =>
             {
-                var scene = Scene.Current;
+                Scene scene = Scene.Current;
                 if (scene == null) return;
-                var target = FindGameObjectByIdentifier(scene, goId);
+                GameObject? target = FindGameObjectByIdentifier(scene, goId);
                 if (target == null) return;
 
                 if (Selection.IsSelected(target))
@@ -476,9 +476,9 @@ public static class Undo
 
         _isContinuous = true;
         _continuousDescription = description;
-        _continuousStartState = new List<(Guid, Float3, Quaternion, Float3)>();
+        _continuousStartState = [];
 
-        foreach (var go in targets)
+        foreach (GameObject go in targets)
         {
             if (go == null) continue;
             _continuousStartState.Add((go.Identifier, go.Transform.LocalPosition, go.Transform.LocalRotation, go.Transform.LocalScale));
@@ -494,26 +494,26 @@ public static class Undo
 
         var records = new List<UndoRecord>();
 
-        foreach (var (goId, startPos, startRot, startScale) in _continuousStartState)
+        foreach ((Guid goId, Float3 startPos, Quaternion startRot, Float3 startScale) in _continuousStartState)
         {
-            var go = FindGO(goId);
+            GameObject? go = FindGO(goId);
             if (go == null) continue;
 
-            var endPos = go.Transform.LocalPosition;
-            var endRot = go.Transform.LocalRotation;
-            var endScale = go.Transform.LocalScale;
+            Float3 endPos = go.Transform.LocalPosition;
+            Quaternion endRot = go.Transform.LocalRotation;
+            Float3 endScale = go.Transform.LocalScale;
 
             if (startPos.Equals(endPos) && startRot == endRot && startScale.Equals(endScale))
                 continue;
 
-            var capturedId = goId;
-            var sPos = startPos; var sRot = startRot; var sScale = startScale;
-            var ePos = endPos; var eRot = endRot; var eScale = endScale;
+            Guid capturedId = goId;
+            Float3 sPos = startPos; Quaternion sRot = startRot; Float3 sScale = startScale;
+            Float3 ePos = endPos; Quaternion eRot = endRot; Float3 eScale = endScale;
 
             records.Add(new ActionRecord(
                 undo: () =>
                 {
-                    var g = FindGO(capturedId);
+                    GameObject? g = FindGO(capturedId);
                     if (g == null) return;
                     g.Transform.LocalPosition = sPos;
                     g.Transform.LocalRotation = sRot;
@@ -521,7 +521,7 @@ public static class Undo
                 },
                 redo: () =>
                 {
-                    var g = FindGO(capturedId);
+                    GameObject? g = FindGO(capturedId);
                     if (g == null) return;
                     g.Transform.LocalPosition = ePos;
                     g.Transform.LocalRotation = eRot;
@@ -546,9 +546,9 @@ public static class Undo
     {
         if (!_isContinuous || _continuousStartState == null) return;
 
-        foreach (var (goId, startPos, startRot, startScale) in _continuousStartState)
+        foreach ((Guid goId, Float3 startPos, Quaternion startRot, Float3 startScale) in _continuousStartState)
         {
-            var go = FindGO(goId);
+            GameObject? go = FindGO(goId);
             if (go == null) continue;
             go.Transform.LocalPosition = startPos;
             go.Transform.LocalRotation = startRot;
@@ -593,7 +593,7 @@ public static class Undo
 
         if (_undoStack.Count == 0) return;
 
-        var step = _undoStack[^1];
+        UndoStep step = _undoStack[^1];
         _undoStack.RemoveAt(_undoStack.Count - 1);
 
         // Undo in reverse order
@@ -627,7 +627,7 @@ public static class Undo
 
         if (_redoStack.Count == 0) return;
 
-        var step = _redoStack[^1];
+        UndoStep step = _redoStack[^1];
         _redoStack.RemoveAt(_redoStack.Count - 1);
 
         // Redo in forward order
@@ -691,7 +691,7 @@ public static class Undo
 
         _undoStack.AddRange(saved.UndoSteps);
         _redoStack.AddRange(saved.RedoSteps);
-        foreach (var (target, before) in saved.Snapshots) _pendingSnapshots[target] = before;
+        foreach ((object? target, MemoryCopy? before) in saved.Snapshots) _pendingSnapshots[target] = before;
         _pendingActions.AddRange(saved.Actions);
         _pendingActionGroups.AddRange(saved.ActionGroups);
         _pendingStructural.AddRange(saved.Structural);
@@ -733,7 +733,7 @@ public static class Undo
     private static void FlushPendingRecords()
     {
         // Flush deferred structural operations first (serializes created GOs now that components are added)
-        foreach (var (go, desc, isCreate) in _pendingStructural)
+        foreach ((GameObject? go, string? desc, bool isCreate) in _pendingStructural)
         {
             if (go == null || go.IsDisposed) continue;
             if (isCreate)
@@ -746,14 +746,14 @@ public static class Undo
         bool hasActions = _pendingActions.Count > 0 || _pendingActionGroups.Count > 0;
 
         // Grouped actions push as a single multi-record step (coalescing continuous edits).
-        foreach (var (step, coalesce) in _pendingActionGroups)
+        foreach ((UndoStep? step, bool coalesce) in _pendingActionGroups)
         {
             if (coalesce && TryCoalesceActionGroup(step)) { _redoStack.Clear(); continue; }
             PushStep(step);
         }
         _pendingActionGroups.Clear();
 
-        foreach (var (desc, record) in _pendingActions)
+        foreach ((string? desc, UndoRecord? record) in _pendingActions)
             PushStep(new UndoStep(desc, [record], isCoalescable: false));
         _pendingActions.Clear();
 
@@ -769,7 +769,7 @@ public static class Undo
         // Build property records from snapshots
         var propertyRecords = new List<PropertyRecord>();
 
-        foreach (var (target, before) in _pendingSnapshots)
+        foreach ((object? target, MemoryCopy? before) in _pendingSnapshots)
         {
             if (target is EngineObject eo && eo.IsDisposed) continue;
 
@@ -787,7 +787,7 @@ public static class Undo
         }
         else if (propertyRecords.Count > 0)
         {
-            PushStep(new UndoStep("Modify Properties", propertyRecords.Cast<UndoRecord>().ToList(), isCoalescable: true));
+            PushStep(new UndoStep("Modify Properties", [.. propertyRecords.Cast<UndoRecord>()], isCoalescable: true));
         }
     }
 
@@ -802,7 +802,7 @@ public static class Undo
     {
         if (_undoStack.Count == 0) return false;
 
-        var prev = _undoStack[^1];
+        UndoStep prev = _undoStack[^1];
         if (!prev.IsCoalescable) return false;
         if (prev.Records.Count != newRecords.Count) return false;
 
@@ -813,7 +813,7 @@ public static class Undo
         for (int i = 0; i < newRecords.Count; i++)
         {
             if (prev.Records[i] is not PropertyRecord prevPR) return false;
-            var newPR = newRecords[i];
+            PropertyRecord newPR = newRecords[i];
 
             // Same target? Compare by identifier for Component, by fallback ref for others
             if (prevPR.ComponentIdentifier != Guid.Empty || newPR.ComponentIdentifier != Guid.Empty)
@@ -822,8 +822,8 @@ public static class Undo
             }
             else
             {
-                var prevTarget = prevPR.ResolveTarget();
-                var newTarget = newPR.ResolveTarget();
+                object? prevTarget = prevPR.ResolveTarget();
+                object? newTarget = newPR.ResolveTarget();
                 if (prevTarget == null || newTarget == null || !ReferenceEquals(prevTarget, newTarget)) return false;
             }
 
@@ -843,7 +843,7 @@ public static class Undo
     {
         if (_undoStack.Count == 0) return false;
 
-        var prev = _undoStack[^1];
+        UndoStep prev = _undoStack[^1];
         if (prev.Description != step.Description) return false;
         if (prev.Records.Count != step.Records.Count) return false;
         if (Environment.TickCount64 - prev.Timestamp > CoalesceWindowMs) return false;
@@ -879,8 +879,8 @@ public static class Undo
     }
 
     // Fields that must never be overwritten by undo they are identity/internal state
-    private static readonly HashSet<string> _undoSkipFields = new()
-    {
+    private static readonly HashSet<string> _undoSkipFields =
+    [
         "_identifier",        // Component identity must be preserved
         "_instanceID",        // EngineObject instance ID
         "_enabledInHierarchy",// Derived state, not user-settable
@@ -889,7 +889,7 @@ public static class Undo
         "_hasBeenEnabled",
         "_executeAlwaysCached",
         "<IsDisposed>k__BackingField", // Disposed state
-    };
+    ];
 
     /// <summary>
     /// Copy serializable fields from an EchoObject onto a live object.
@@ -900,14 +900,14 @@ public static class Undo
     {
         try
         {
-            var temp = Serializer.Deserialize(echo, type);
+            object? temp = Serializer.Deserialize(echo, type);
             if (temp == null) return;
 
             // Walk up the hierarchy to get all serializable fields (matching Echo's behavior)
-            var currentType = type;
+            Type? currentType = type;
             while (currentType != null && currentType != typeof(object))
             {
-                foreach (var field in currentType.GetFields(
+                foreach (FieldInfo field in currentType.GetFields(
                     BindingFlags.Public |
                     BindingFlags.NonPublic |
                     BindingFlags.Instance |
@@ -923,7 +923,7 @@ public static class Undo
 
                     try
                     {
-                        var value = field.GetValue(temp);
+                        object? value = field.GetValue(temp);
                         field.SetValue(target, value);
                     }
                     catch
@@ -950,11 +950,11 @@ public static class Undo
     /// </summary>
     public static GameObject? FindGO(Guid identifier)
     {
-        var scene = Scene.Current;
+        Scene scene = Scene.Current;
         if (scene == null) return null;
-        foreach (var root in scene.RootObjects)
+        foreach (GameObject root in scene.RootObjects)
         {
-            var found = root.FindChildByIdentifier(identifier);
+            GameObject found = root.FindChildByIdentifier(identifier);
             if (found != null) return found;
         }
         return null;
@@ -965,11 +965,11 @@ public static class Undo
     /// </summary>
     public static Component? FindComponent(Guid identifier)
     {
-        var scene = Scene.Current;
+        Scene scene = Scene.Current;
         if (scene == null) return null;
-        foreach (var go in scene.AllObjects)
+        foreach (GameObject go in scene.AllObjects)
         {
-            var comp = go.GetComponentByIdentifier(identifier);
+            Component? comp = go.GetComponentByIdentifier(identifier);
             if (comp != null) return comp;
         }
         return null;
@@ -981,9 +981,9 @@ public static class Undo
     private static GameObject? FindGameObjectByIdentifier(Scene scene, Guid identifier)
     {
         if (scene == null) return null;
-        foreach (var root in scene.RootObjects)
+        foreach (GameObject root in scene.RootObjects)
         {
-            var found = root.FindChildByIdentifier(identifier);
+            GameObject found = root.FindChildByIdentifier(identifier);
             if (found != null) return found;
         }
         return null;

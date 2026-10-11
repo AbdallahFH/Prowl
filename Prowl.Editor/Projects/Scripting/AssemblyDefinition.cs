@@ -54,16 +54,16 @@ public sealed class AssemblyDefinition
     public string Name = "NewAssembly";
 
     /// <summary>Names of other assembly definitions this assembly depends on.</summary>
-    public List<string> References = new();
+    public List<string> References = [];
 
     /// <summary>
     /// If non-empty, the assembly is only included on exactly these platforms.
     /// Mutually exclusive with <see cref="ExcludePlatforms"/>.
     /// </summary>
-    public List<string> IncludePlatforms = new();
+    public List<string> IncludePlatforms = [];
 
     /// <summary>If non-empty, the assembly is included everywhere except these platforms.</summary>
-    public List<string> ExcludePlatforms = new();
+    public List<string> ExcludePlatforms = [];
 
     public bool AllowUnsafeCode = false;
 
@@ -80,10 +80,10 @@ public sealed class AssemblyDefinition
 
     /// <summary>Managed plugin file names (e.g. "MyLibrary.dll") referenced explicitly.
     /// Only consulted when <see cref="OverrideReferences"/> is true.</summary>
-    public List<string> PrecompiledReferences = new();
+    public List<string> PrecompiledReferences = [];
 
     /// <summary>Scripting define symbols that must all be set for this assembly to be compiled.</summary>
-    public List<string> DefineConstraints = new();
+    public List<string> DefineConstraints = [];
 
     /// <summary>When true the assembly does not reference the engine assemblies (Prowl.Runtime/Editor).</summary>
     public bool NoEngineReferences = false;
@@ -134,17 +134,17 @@ public sealed class AssemblyDefinition
     public static AssemblyDefinition FromEcho(EchoObject echo)
     {
         var def = new AssemblyDefinition();
-        if (echo.TryGet("name", out var n) && !string.IsNullOrWhiteSpace(n.StringValue))
+        if (echo.TryGet("name", out EchoObject? n) && !string.IsNullOrWhiteSpace(n.StringValue))
             def.Name = n.StringValue;
         ReadStringList(echo, "references", def.References);
         ReadStringList(echo, "includePlatforms", def.IncludePlatforms);
         ReadStringList(echo, "excludePlatforms", def.ExcludePlatforms);
-        if (echo.TryGet("allowUnsafeCode", out var au)) def.AllowUnsafeCode = au.BoolValue;
-        if (echo.TryGet("autoReferenced", out var ar)) def.AutoReferenced = ar.BoolValue;
-        if (echo.TryGet("overrideReferences", out var or)) def.OverrideReferences = or.BoolValue;
+        if (echo.TryGet("allowUnsafeCode", out EchoObject? au)) def.AllowUnsafeCode = au.BoolValue;
+        if (echo.TryGet("autoReferenced", out EchoObject? ar)) def.AutoReferenced = ar.BoolValue;
+        if (echo.TryGet("overrideReferences", out EchoObject? or)) def.OverrideReferences = or.BoolValue;
         ReadStringList(echo, "precompiledReferences", def.PrecompiledReferences);
         ReadStringList(echo, "defineConstraints", def.DefineConstraints);
-        if (echo.TryGet("noEngineReferences", out var ne)) def.NoEngineReferences = ne.BoolValue;
+        if (echo.TryGet("noEngineReferences", out EchoObject? ne)) def.NoEngineReferences = ne.BoolValue;
         return def;
     }
 
@@ -163,7 +163,7 @@ public sealed class AssemblyDefinition
     private static EchoObject StringList(List<string> values)
     {
         var list = EchoObject.NewList();
-        foreach (var v in values)
+        foreach (string v in values)
             list.ListAdd(new EchoObject(v));
         return list;
     }
@@ -171,8 +171,8 @@ public sealed class AssemblyDefinition
     private static void ReadStringList(EchoObject echo, string key, List<string> into)
     {
         into.Clear();
-        if (echo.TryGet(key, out var tag) && tag.TagType == EchoType.List)
-            foreach (var item in tag.List)
+        if (echo.TryGet(key, out EchoObject? tag) && tag.TagType == EchoType.List)
+            foreach (EchoObject item in tag.List)
                 if (!string.IsNullOrWhiteSpace(item.StringValue))
                     into.Add(item.StringValue);
     }
@@ -210,7 +210,7 @@ public static class AssemblyDefinitionDatabase
         if (!System.IO.Directory.Exists(project.AssetsPath))
             return result;
 
-        foreach (var file in System.IO.Directory.EnumerateFiles(project.AssetsPath, "*" + Extension, SearchOption.AllDirectories))
+        foreach (string file in System.IO.Directory.EnumerateFiles(project.AssetsPath, "*" + Extension, SearchOption.AllDirectories))
         {
             AssemblyDefinition def;
             try { def = AssemblyDefinition.ReadFromFile(file); }
@@ -241,7 +241,7 @@ public static class AssemblyDefinitionDatabase
 
         AsmDefFile? best = null;
         int bestLen = -1;
-        foreach (var asm in asmdefs)
+        foreach (AsmDefFile asm in asmdefs)
         {
             if (IsWithin(scriptDir, asm.Directory) && asm.Directory.Length > bestLen)
             {

@@ -16,11 +16,11 @@ public class LayerMaskPropertyEditor : PropertyEditor
 {
     public override void OnGUI(Paper paper, string id, string label, object? value, Action<object?> onChange, int depth)
     {
-        var mask = value is LayerMask lm ? lm : LayerMask.Nothing;
+        LayerMask mask = value is LayerMask lm ? lm : LayerMask.Nothing;
 
         // Pull the named layers out of the tag/layer manager. Empty slots are skipped so
         // the popover only shows assignable layers (matches the legacy widget's behaviour).
-        var layers = TagLayerManager.layers;
+        string[] layers = TagLayerManager.layers;
         var validIndices = new List<int>(layers.Length);
         for (int i = 0; i < layers.Length; i++)
             if (!string.IsNullOrEmpty(layers[i])) validIndices.Add(i);
@@ -33,7 +33,7 @@ public class LayerMaskPropertyEditor : PropertyEditor
         EditorGUI.MultiSelectRow(paper, id, label, () =>
             Origami.MultiDropdown<int>(paper, $"{id}_md", selected, picked =>
                 {
-                    var updated = LayerMask.Nothing;
+                    LayerMask updated = LayerMask.Nothing;
                     foreach (int i in picked) updated.SetLayer(i);
                     onChange(updated);
                 }, validIndices)

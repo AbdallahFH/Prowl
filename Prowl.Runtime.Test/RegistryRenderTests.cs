@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using Prowl.Runtime.Rendering;
+using Prowl.Runtime.Resources;
 
 using Xunit;
 
@@ -32,12 +33,12 @@ public class RegistryRenderTests : RuntimeTestBase
     [Fact]
     public void CollectRenderables_InvokesRegisteredComponents()
     {
-        var scene = CreateScene(enable: true);
-        var go = CreateGameObject();
-        var probe = go.AddComponent<RenderCollectProbe>();
+        Scene scene = CreateScene(enable: true);
+        GameObject go = CreateGameObject();
+        RenderCollectProbe probe = go.AddComponent<RenderCollectProbe>();
         scene.Add(go);
 
-        scene.CollectRenderables(null!, new List<IRenderable>(), new List<IRenderableLight>());
+        scene.CollectRenderables(null!, [], []);
 
         Assert.Equal(1, probe.Calls);
     }
@@ -45,13 +46,13 @@ public class RegistryRenderTests : RuntimeTestBase
     [Fact]
     public void CollectRenderables_SkipsDisabledComponent()
     {
-        var scene = CreateScene(enable: true);
-        var go = CreateGameObject();
-        var probe = go.AddComponent<RenderCollectProbe>();
+        Scene scene = CreateScene(enable: true);
+        GameObject go = CreateGameObject();
+        RenderCollectProbe probe = go.AddComponent<RenderCollectProbe>();
         scene.Add(go);
         probe.Enabled = false;
 
-        scene.CollectRenderables(null!, new List<IRenderable>(), new List<IRenderableLight>());
+        scene.CollectRenderables(null!, [], []);
 
         Assert.Equal(0, probe.Calls);
     }
@@ -60,12 +61,12 @@ public class RegistryRenderTests : RuntimeTestBase
     public void CollectRenderables_RunsEvenWhenNotPlaying()
     {
         Application.IsPlaying = false; // rendering happens in edit mode too
-        var scene = CreateScene(enable: true);
-        var go = CreateGameObject();
-        var probe = go.AddComponent<RenderCollectProbe>();
+        Scene scene = CreateScene(enable: true);
+        GameObject go = CreateGameObject();
+        RenderCollectProbe probe = go.AddComponent<RenderCollectProbe>();
         scene.Add(go);
 
-        scene.CollectRenderables(null!, new List<IRenderable>(), new List<IRenderableLight>());
+        scene.CollectRenderables(null!, [], []);
 
         Assert.Equal(1, probe.Calls);
     }
@@ -73,9 +74,9 @@ public class RegistryRenderTests : RuntimeTestBase
     [Fact]
     public void DrawGizmos_InvokesRegisteredComponents()
     {
-        var scene = CreateScene(enable: true);
-        var go = CreateGameObject();
-        var probe = go.AddComponent<GizmoProbe>();
+        Scene scene = CreateScene(enable: true);
+        GameObject go = CreateGameObject();
+        GizmoProbe probe = go.AddComponent<GizmoProbe>();
         scene.Add(go);
 
         scene.DrawGizmos();
@@ -86,9 +87,9 @@ public class RegistryRenderTests : RuntimeTestBase
     [Fact]
     public void DrawGizmos_SkipsNoGizmosHideFlag()
     {
-        var scene = CreateScene(enable: true);
-        var go = CreateGameObject();
-        var probe = go.AddComponent<GizmoProbe>();
+        Scene scene = CreateScene(enable: true);
+        GameObject go = CreateGameObject();
+        GizmoProbe probe = go.AddComponent<GizmoProbe>();
         probe.HideFlags = HideFlags.NoGizmos;
         scene.Add(go);
 

@@ -29,7 +29,7 @@ namespace Prowl.Editor.Inspector;
 public class AnimationGraphWindow : DockPanel
 {
     /// <summary>Every window currently open, so opening a graph can reuse one instead of stacking up.</summary>
-    private static readonly List<AnimationGraphWindow> s_open = new();
+    private static readonly List<AnimationGraphWindow> s_open = [];
 
     /// <summary>Copied nodes, shared by every window so a copy in one graph pastes into another.</summary>
     private static AnimationGraphView.Fragment? s_clipboard;
@@ -187,7 +187,7 @@ public class AnimationGraphWindow : DockPanel
         if (_graph is { IsLoaded: true } current && current.ContentVersion == _seenContent) return;
 
         string? machine = keepPlace ? _insideMachine?.Id : null;
-        List<string> selected = keepPlace ? new List<string>(_controller.SelectedNodes) : new List<string>();
+        List<string> selected = keepPlace ? new List<string>(_controller.SelectedNodes) : [];
 
         _graph = AssetDatabase.Load<AnimationGraph>(_assetGuid);
         if (_graph is not { IsLoaded: true }) _graph = null;
@@ -330,8 +330,8 @@ public class AnimationGraphWindow : DockPanel
 
         // Tied to the asset the edit was made on, which may no longer be the one showing.
         Guid asset = _assetGuid;
-        Action undo = () => Restore(asset, before, compiles);
-        Action redo = () => Restore(asset, after, compiles);
+        void undo() => Restore(asset, before, compiles);
+        void redo() => Restore(asset, after, compiles);
 
         if (coalesce) Undo.RegisterCoalescableAction(description, undo, redo);
         else Undo.RegisterAction(description, undo, redo);
@@ -380,7 +380,7 @@ public class AnimationGraphWindow : DockPanel
     /// <summary>Copies a snapshot's records into a graph asset, keeping the asset itself.</summary>
     private static bool CopyRecords(EchoObject snapshot, AnimationGraph target, bool compiles)
     {
-        var restored = Serializer.Deserialize<AnimationGraph>(snapshot.Clone());
+        AnimationGraph? restored = Serializer.Deserialize<AnimationGraph>(snapshot.Clone());
         if (restored == null) return false;
 
         target.Nodes = restored.Nodes;
@@ -406,9 +406,9 @@ public class AnimationGraphWindow : DockPanel
 
     public override void OnGUI(Paper paper, float width, float height)
     {
-        var font = EditorTheme.DefaultFont;
+        Scribe.FontFile? font = EditorTheme.DefaultFont;
         if (font == null) return;
-        var m = Origami.Current.Metrics;
+        OrigamiMetrics m = Origami.Current.Metrics;
 
         Resolve();
         HandleShortcuts(paper);
@@ -516,7 +516,7 @@ public class AnimationGraphWindow : DockPanel
     {
         var path = new List<BreadcrumbItem>();
 
-        Guid[] parents = _parents.ToArray();
+        Guid[] parents = [.. _parents];
         for (int i = parents.Length - 1; i >= 0; i--)
         {
             AnimationGraph? graph = AssetDatabase.Get<AnimationGraph>(parents[i]);
@@ -903,7 +903,7 @@ public class AnimationGraphWindow : DockPanel
     {
         if (s_clipboard == null || s_clipboard.Nodes.Count == 0) return;
 
-        List<GraphNodeRecord> copies = new();
+        List<GraphNodeRecord> copies = [];
         Edit("Paste Nodes", () => copies = _view.Paste(s_clipboard, new Float2(40f, 40f)));
         SelectCopies(copies, frame: true);
     }
@@ -913,7 +913,7 @@ public class AnimationGraphWindow : DockPanel
         List<GraphNodeRecord> records = RecordsOf(nodes);
         if (records.Count == 0) return;
 
-        List<GraphNodeRecord> copies = new();
+        List<GraphNodeRecord> copies = [];
         Edit(records.Count == 1 ? "Duplicate Node" : "Duplicate Nodes", () => copies = _view.Copy(records, new Float2(28f, 28f)));
         SelectCopies(copies, frame: false);
     }
@@ -976,7 +976,7 @@ public class AnimationGraphWindow : DockPanel
                 use(extracted);
                 AnimationGraphView.RemoveInside(_graph!, new[] { owner });
             });
-        }, Project.Current.AssetsPath, new[] { "*.animgraph" }, new[] { "Animation Graph" });
+        }, Project.Current.AssetsPath, ["*.animgraph"], ["Animation Graph"]);
     }
 
     /// <summary>A new graph asset holding what is inside one owner, lifted to be that asset's own graph.</summary>
@@ -1279,9 +1279,9 @@ public class AnimationGraphWindow : DockPanel
     /// <summary>Draws a selected piece of this graph in the inspector, editing through this window's undo.</summary>
     internal void DrawInspector(Paper paper, AnimationGraphSelection selection)
     {
-        var font = EditorTheme.DefaultFont;
+        Scribe.FontFile? font = EditorTheme.DefaultFont;
         if (font == null) return;
-        var m = Origami.Current.Metrics;
+        OrigamiMetrics m = Origami.Current.Metrics;
 
         if (_graph.IsNotValid() || !StillInGraph(selection))
         {
@@ -1382,7 +1382,7 @@ public class AnimationGraphWindow : DockPanel
     /// <summary>The parameter a parameter node reads. Fixed when the node is made, so it is shown, not edited.</summary>
     internal void DrawParameterPicker(Paper paper, string id, string name)
     {
-        var font = EditorTheme.DefaultFont!;
+        Scribe.FontFile font = EditorTheme.DefaultFont!;
         GraphParameterRecord? declared = _graph!.Parameters.Find(p => p.Name == name);
         bool isVirtual = declared == null && AnimationGraphView.VirtualParameters(_graph).Contains(name);
 
@@ -1472,7 +1472,7 @@ public class AnimationGraphWindow : DockPanel
             Origami.Dropdown(paper, "ag_trEasing_v", (int)transition.Easing,
                 v => Set("Set Transition Easing", () => transition.Easing = (TransitionEasing)v), easings).Show());
 
-        string[] syncs = { "Start Fresh", "Match Time", "Synchronized" };
+        string[] syncs = ["Start Fresh", "Match Time", "Synchronized"];
         EditorGUI.Row(paper, "ag_trSync", "Timing", () =>
             Origami.Dropdown(paper, "ag_trSync_v", (int)transition.Sync,
                 v => Set("Set Transition Timing", () => transition.Sync = (TransitionSync)v), syncs).Show());
@@ -1589,8 +1589,8 @@ public class AnimationGraphWindow : DockPanel
         bool selected = Selection.IsSelected(new AnimationGraphSelection(this, parameter: parameter));
         string live = _probe.ReadParameter(parameter);
 
-        var row = ParameterRow(paper, m, "ag_param", index, parameter.Name, selected)
-            .OnClick(0, (_, _) => Publish(new List<AnimationGraphSelection> { new(this, parameter: parameter) }));
+        ElementBuilder row = ParameterRow(paper, m, "ag_param", index, parameter.Name, selected)
+            .OnClick(0, (_, _) => Publish([new(this, parameter: parameter)]));
 
         using (row.Enter())
         {
@@ -1614,7 +1614,7 @@ public class AnimationGraphWindow : DockPanel
     /// <summary>A Virtual Parameter's name, which drags onto the graph like a parameter.</summary>
     private void DrawVirtualParameterRow(Paper paper, Scribe.FontFile font, OrigamiMetrics m, string name, int index)
     {
-        var row = ParameterRow(paper, m, "ag_virtual", index, name, selected: false)
+        ElementBuilder row = ParameterRow(paper, m, "ag_virtual", index, name, selected: false)
             .Tooltip("Set by the Virtual Parameter node of this name. Drag it onto the graph to read it.");
 
         using (row.Enter())
@@ -1746,7 +1746,7 @@ public class AnimationGraphWindow : DockPanel
 
         Edit("Add Parameter", () => _graph!.Parameters.Add(parameter));
         _parameterPopup = false;
-        Publish(new List<AnimationGraphSelection> { new(this, parameter: parameter) });
+        Publish([new(this, parameter: parameter)]);
     }
 
     private void DrawParameterDefault(Paper paper, string id, GraphParameterRecord parameter)
@@ -1785,12 +1785,12 @@ public class AnimationGraphWindow : DockPanel
     }
 
     private static readonly NodeValueKind[] ParameterKinds =
-    {
+    [
         NodeValueKind.Number, NodeValueKind.Flag, NodeValueKind.Integer,
         NodeValueKind.Vector, NodeValueKind.Id, NodeValueKind.Target, NodeValueKind.Flag,
-    };
+    ];
 
-    private static readonly string[] ParameterKindNames = { "Number", "Flag", "Int", "Vector", "Name", "Target", "Trigger" };
+    private static readonly string[] ParameterKindNames = ["Number", "Flag", "Int", "Vector", "Name", "Target", "Trigger"];
 
     /// <summary>The popup entry that makes a trigger, a flag that turns itself off once used.</summary>
     private const int TriggerChoice = 6;
@@ -1986,11 +1986,11 @@ public class AnimationGraphAssetEditor : AssetImporterEditor
 
     public override void OnGUI(Paper paper, string id, AssetEntry entry, EngineObject? asset)
     {
-        var font = EditorTheme.DefaultFont;
+        Scribe.FontFile? font = EditorTheme.DefaultFont;
         if (font == null) return;
 
         var graph = asset as AnimationGraph;
-        var m = Origami.Current.Metrics;
+        OrigamiMetrics m = Origami.Current.Metrics;
 
         using (paper.Row($"{id}_open").Width(UnitValue.Stretch()).Height(34)
             .Margin(m.PaddingLarge, m.PaddingLarge, m.Spacing, m.SpacingMedium).Enter())

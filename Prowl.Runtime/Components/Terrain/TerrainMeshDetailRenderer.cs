@@ -111,11 +111,11 @@ internal class TerrainMeshDetailRenderer
 
         for (int protoIdx = 0; protoIdx < data.DetailPrototypes.Count; protoIdx++)
         {
-            var proto = data.DetailPrototypes[protoIdx];
+            DetailPrototype proto = data.DetailPrototypes[protoIdx];
             if (proto.RenderMode != DetailRenderMode.Mesh) continue;
             if (protoIdx >= data.DetailLayers.Count) continue;
 
-            var mesh = proto.Mesh;
+            Mesh? mesh = proto.Mesh;
             if (mesh == null) continue;
 
             // Nothing painted, nothing to place
@@ -141,7 +141,7 @@ internal class TerrainMeshDetailRenderer
     private static void Rebuild(Build build, TerrainData data, TerrainComponent terrain, Float4x4 terrainToWorld, DetailPrototype proto,
         int protoIdx, Mesh mesh, Float2 centre, float distance, Float4 painted)
     {
-        var densityMap = data.DetailLayers[protoIdx];
+        byte[] densityMap = data.DetailLayers[protoIdx];
         int detailRes = data.DetailResolution;
         float terrainSize = data.Size;
         float cellSize = terrainSize / detailRes;
@@ -234,7 +234,7 @@ internal class TerrainMeshDetailRenderer
                 "The furthest painted cells are left bare. Paint it more sparsely or shorten Detail Distance.");
         }
 
-        build.Instances = instances.ToArray();
+        build.Instances = [.. instances];
         build.Renderables = build.Instances.Length == 0
             ? []
             : BuildRenderables(build.Instances, terrain, proto, mesh, centre, radius,

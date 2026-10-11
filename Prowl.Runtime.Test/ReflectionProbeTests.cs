@@ -13,17 +13,17 @@ public class ReflectionProbeTests : RuntimeTestBase
     [Fact]
     public void BakedCapture_SurvivesASaveAndLoadWithItsProbe()
     {
-        var go = CreateGameObject("Probe");
-        var probe = go.AddComponent<ReflectionProbe>();
+        GameObject go = CreateGameObject("Probe");
+        ReflectionProbe probe = go.AddComponent<ReflectionProbe>();
         probe.BoxSize = new Float3(4, 5, 6);
         probe.Importance = 3;
-        var faces = new byte[6 * 2][];
+        byte[][] faces = new byte[6 * 2][];
         for (int i = 0; i < faces.Length; i++)
             faces[i] = [(byte)i, (byte)(i * 3), 7];
         probe.SetBaked(new ReflectionProbe.BakedCubemap { Size = 8, Mips = 2, Faces = faces });
 
         GameObject copy = Serializer.Deserialize<GameObject>(Serializer.Serialize(typeof(GameObject), go))!;
-        var loaded = copy.GetComponent<ReflectionProbe>()!;
+        ReflectionProbe loaded = copy.GetComponent<ReflectionProbe>()!;
 
         Assert.True(loaded.HasBakedData);
         Assert.Equal(8, loaded.Baked!.Size);

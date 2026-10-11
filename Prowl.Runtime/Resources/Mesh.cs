@@ -271,7 +271,7 @@ public class Mesh : Asset, ISerializable
     {
         EnsureLoaded();
         if (shapeIndex < 0 || shapeIndex >= _blendShapes.Length) return 0f;
-        var frames = _blendShapes[shapeIndex].Frames;
+        BlendShapeFrame[] frames = _blendShapes[shapeIndex].Frames;
         return (frameIndex >= 0 && frameIndex < frames.Length) ? frames[frameIndex].Weight : 0f;
     }
 
@@ -319,9 +319,9 @@ public class Mesh : Asset, ISerializable
         for (int s = 0; s < _blendShapes.Length; s++)
         {
             _morphLayerOffsets[s] = layers;
-            var frames = _blendShapes[s].Frames;
+            BlendShapeFrame[] frames = _blendShapes[s].Frames;
             layers += frames.Length;
-            foreach (var f in frames)
+            foreach (BlendShapeFrame f in frames)
             {
                 if (f.DeltaNormals != null) anyNormals = true;
                 if (f.DeltaTangents != null) anyTangents = true;
@@ -340,32 +340,32 @@ public class Mesh : Asset, ISerializable
         _morphLayerCount = layers;
         int perKind = (int)total;
         var pos = new Float4[perKind];
-        var nrm = anyNormals ? new Float4[perKind] : null;
-        var tan = anyTangents ? new Float4[perKind] : null;
+        Float4[]? nrm = anyNormals ? new Float4[perKind] : null;
+        Float4[]? tan = anyTangents ? new Float4[perKind] : null;
 
         for (int s = 0; s < _blendShapes.Length; s++)
         {
-            var frames = _blendShapes[s].Frames;
+            BlendShapeFrame[] frames = _blendShapes[s].Frames;
             for (int fi = 0; fi < frames.Length; fi++)
             {
-                var f = frames[fi];
+                BlendShapeFrame f = frames[fi];
                 long baseIdx = (long)(_morphLayerOffsets[s] + fi) * vtx;
 
-                var dv = f.DeltaVertices;
+                Float3[] dv = f.DeltaVertices;
                 int count = Math.Min(vtx, dv.Length);
                 for (int v = 0; v < count; v++)
                     pos[(int)(baseIdx + v)] = new Float4(dv[v].X, dv[v].Y, dv[v].Z, 0f);
 
                 if (nrm != null && f.DeltaNormals != null)
                 {
-                    var dn = f.DeltaNormals;
+                    Float3[] dn = f.DeltaNormals;
                     int cn = Math.Min(vtx, dn.Length);
                     for (int v = 0; v < cn; v++)
                         nrm[(int)(baseIdx + v)] = new Float4(dn[v].X, dn[v].Y, dn[v].Z, 0f);
                 }
                 if (tan != null && f.DeltaTangents != null)
                 {
-                    var dt = f.DeltaTangents;
+                    Float3[] dt = f.DeltaTangents;
                     int ct = Math.Min(vtx, dt.Length);
                     for (int v = 0; v < ct; v++)
                         tan[(int)(baseIdx + v)] = new Float4(dt[v].X, dt[v].Y, dt[v].Z, 0f);
@@ -398,7 +398,7 @@ public class Mesh : Asset, ISerializable
     }
 
     // Submesh support: each submesh defines a range within the shared index buffer
-    private List<SubMeshDescriptor> _subMeshes = new();
+    private List<SubMeshDescriptor> _subMeshes = [];
 
     /// <summary>Number of submeshes. Returns 1 if no submeshes defined (entire mesh is one submesh).</summary>
     public int SubMeshCount { get { EnsureLoaded(); return _subMeshes.Count > 0 ? _subMeshes.Count : 1; } }
@@ -492,7 +492,7 @@ public class Mesh : Asset, ISerializable
     private int lastIndexCount = 0;
     private VertexFormat lastVertexLayout = null;
 
-    /// <summary>Cached physics bake (see <see cref="PhysicsWorld.BakeMesh"/>).
+    /// <summary>Cached physics bake (see <see cref="PhysicsWorld.BakeMesh"/>).</summary>
     internal BakedPhysicsMesh? BakedPhysics;
 
     public Mesh() { }
@@ -577,7 +577,7 @@ public class Mesh : Asset, ISerializable
         // order: Graphics.CreateBuffer enqueues a create+upload CB, and reuses encode
         // an UpdateBuffer here. Any rendering CB submitted after this Upload is
         // guaranteed to see the new data because the executor preserves submit order.
-        using var cmd = Graphics.GetCommandBuffer("Mesh.Upload");
+        using CommandBuffer cmd = Graphics.GetCommandBuffer("Mesh.Upload");
 
         if (canReuseVertexBuffer)
         {
@@ -702,16 +702,16 @@ public class Mesh : Asset, ISerializable
 
         if (instancedVAO == null)
         {
-            var instanceFormat = new VertexFormat(new[]
-            {
+            var instanceFormat = new VertexFormat(
+            [
                 new Element((VertexSemantic)8, VertexType.Float, 4, divisor: 1),  // ModelRow0
                 new Element((VertexSemantic)9, VertexType.Float, 4, divisor: 1),  // ModelRow1
                 new Element((VertexSemantic)10, VertexType.Float, 4, divisor: 1), // ModelRow2
                 new Element((VertexSemantic)11, VertexType.Float, 4, divisor: 1), // ModelRow3
                 new Element((VertexSemantic)12, VertexType.Float, 4, divisor: 1), // Color (RGBA)
                 new Element((VertexSemantic)13, VertexType.Float, 4, divisor: 1), // CustomData
-            });
-            var meshFormat = GetVertexLayout(this);
+            ]);
+            VertexFormat meshFormat = GetVertexLayout(this);
             instancedVAO = Graphics.CreateVertexArray(
                 meshFormat,
                 vertexBuffer,
@@ -1745,7 +1745,7 @@ public class Mesh : Asset, ISerializable
 
             // Submeshes
             writer.Write(_subMeshes.Count);
-            foreach (var sub in _subMeshes)
+            foreach (SubMeshDescriptor sub in _subMeshes)
             {
                 writer.Write(sub.IndexStart);
                 writer.Write(sub.IndexCount);
@@ -1754,11 +1754,11 @@ public class Mesh : Asset, ISerializable
 
             // Blend shapes (written after submeshes; older meshes simply lack this trailing block)
             writer.Write(_blendShapes.Length);
-            foreach (var bs in _blendShapes)
+            foreach (BlendShape bs in _blendShapes)
             {
                 writer.Write(bs.Name ?? string.Empty);
                 writer.Write(bs.Frames.Length);
-                foreach (var f in bs.Frames)
+                foreach (BlendShapeFrame f in bs.Frames)
                 {
                     writer.Write(f.Weight);
                     bool hasN = f.DeltaNormals != null;
@@ -1766,9 +1766,9 @@ public class Mesh : Asset, ISerializable
                     writer.Write(hasN);
                     writer.Write(hasT);
                     writer.Write(f.DeltaVertices.Length);
-                    foreach (var d in f.DeltaVertices) { writer.Write(d.X); writer.Write(d.Y); writer.Write(d.Z); }
-                    if (hasN) foreach (var d in f.DeltaNormals) { writer.Write(d.X); writer.Write(d.Y); writer.Write(d.Z); }
-                    if (hasT) foreach (var d in f.DeltaTangents) { writer.Write(d.X); writer.Write(d.Y); writer.Write(d.Z); }
+                    foreach (Float3 d in f.DeltaVertices) { writer.Write(d.X); writer.Write(d.Y); writer.Write(d.Z); }
+                    if (hasN) foreach (Float3 d in f.DeltaNormals) { writer.Write(d.X); writer.Write(d.Y); writer.Write(d.Z); }
+                    if (hasT) foreach (Float3 d in f.DeltaTangents) { writer.Write(d.X); writer.Write(d.Y); writer.Write(d.Z); }
                 }
             }
 
@@ -2038,7 +2038,7 @@ public static class MeshGeometry
     {
         for (int s = 0; s < mesh.SubMeshCount; s++)
         {
-            var sub = mesh.GetSubMesh(s);
+            SubMeshDescriptor sub = mesh.GetSubMesh(s);
             if (sub.IndexCount > 0 && sub.Topology != Topology.Triangles)
                 throw new InvalidOperationException($"Mesh '{mesh.Name}' has a {sub.Topology} submesh, only triangle meshes convert to geometry.");
         }
@@ -2075,7 +2075,7 @@ public static class MeshGeometry
         {
             for (int f = 0; f < shapes[s].Frames.Length; f++)
             {
-                var frame = shapes[s].Frames[f];
+                BlendShapeFrame frame = shapes[s].Frames[f];
                 var names = new FrameNames(s, f);
                 bool hasNormals = frame.DeltaNormals?.Length == count, hasTangents = frame.DeltaTangents?.Length == count;
                 geometry.AddLoopAttribute(names.Position, GeometryData.AttributeBaseType.Float, 3);
@@ -2087,7 +2087,7 @@ public static class MeshGeometry
         geometry.AddFaceAttribute(SubMesh, GeometryData.AttributeBaseType.Int, 1);
 
         // Vertices that share a position share a geometry vertex
-        var weld = new int[count];
+        int[] weld = new int[count];
         var points = new Dictionary<Float3, int>(count, PositionComparer.Instance);
         var basePoints = new List<Float3>();
         for (int i = 0; i < count; i++)
@@ -2108,23 +2108,23 @@ public static class MeshGeometry
         var layerEdges = new List<HashSet<long>>();
         GeometryData.Vertex VertexAt(int point, int layer)
         {
-            if (!layers.TryGetValue((point, layer), out var vertex))
+            if (!layers.TryGetValue((point, layer), out GeometryData.Vertex? vertex))
                 layers[(point, layer)] = vertex = geometry.AddVertex(basePoints[point]);
             return vertex;
         }
 
         int LayerFor(int a, int b, int c)
         {
-            var key = Sorted(a, b, c);
+            (int, int, int) key = Sorted(a, b, c);
             long ab = Directed(a, b), bc = Directed(b, c), ca = Directed(c, a);
             for (int layer = 0; ; layer++)
             {
                 if (layer == layerTriangles.Count)
                 {
-                    layerTriangles.Add(new HashSet<(int, int, int)>());
-                    layerEdges.Add(new HashSet<long>());
+                    layerTriangles.Add([]);
+                    layerEdges.Add([]);
                 }
-                var edges = layerEdges[layer];
+                HashSet<long> edges = layerEdges[layer];
                 if (layerTriangles[layer].Contains(key) || edges.Contains(ab) || edges.Contains(bc) || edges.Contains(ca)) continue;
 
                 layerTriangles[layer].Add(key);
@@ -2138,7 +2138,7 @@ public static class MeshGeometry
         var corners = new GeometryData.Vertex[3];
         for (int s = 0; s < mesh.SubMeshCount; s++)
         {
-            var sub = mesh.GetSubMesh(s);
+            SubMeshDescriptor sub = mesh.GetSubMesh(s);
             for (int i = sub.IndexStart; i + 2 < sub.IndexStart + sub.IndexCount; i += 3)
             {
                 int a = weld[indices[i]], b = weld[indices[i + 1]], c = weld[indices[i + 2]];
@@ -2157,14 +2157,14 @@ public static class MeshGeometry
                     corners[1] = VertexAt(b, layer);
                     corners[2] = VertexAt(c, layer);
                 }
-                var face = geometry.AddFace(corners);
+                GeometryData.Face? face = geometry.AddFace(corners);
                 if (face == null) continue;
                 face.Attributes[SubMesh] = new GeometryData.IntAttributeValue(s);
 
                 for (int k = 0; k < 3; k++)
                 {
                     int source = (int)indices[i + k];
-                    var attributes = face.GetLoop(corners[k])!.Attributes;
+                    Dictionary<string, GeometryData.AttributeValue> attributes = face.GetLoop(corners[k])!.Attributes;
                     if (normals.Length > 0) Set(attributes, Normal, normals[source]);
                     if (tangents.Length > 0) Set(attributes, Tangent, tangents[source]);
                     if (uv.Length > 0) Set(attributes, UV, uv[source]);
@@ -2173,7 +2173,7 @@ public static class MeshGeometry
                     if (colors32.Length > 0) Set(attributes, VertexColor, colors32[source]);
                     if (hasSkin)
                         SetSkin(((GeometryData.IntAttributeValue)attributes[BoneIndices]).Data, Floats(attributes, BoneWeights), boneIndices[source], boneWeights[source]);
-                    foreach (var (frame, names, hasNormals, hasTangents) in frames)
+                    foreach ((BlendShapeFrame? frame, FrameNames names, bool hasNormals, bool hasTangents) in frames)
                     {
                         Set(attributes, names.Position, frame.DeltaVertices.Length == count ? frame.DeltaVertices[source] : Float3.Zero);
                         if (hasNormals) Set(attributes, names.Normal, frame.DeltaNormals![source]);
@@ -2208,7 +2208,7 @@ public static class MeshGeometry
         var frameCounts = new List<int>();
         if (source != null)
         {
-            foreach (var shape in source.BlendShapes) frameCounts.Add(shape.Frames.Length);
+            foreach (BlendShape shape in source.BlendShapes) frameCounts.Add(shape.Frames.Length);
         }
         else
         {
@@ -2226,7 +2226,7 @@ public static class MeshGeometry
                 frameNames.Add(new FrameNames(s, f));
 
         var loopNames = new List<string>();
-        foreach (var def in geometry.LoopAttributes) loopNames.Add(def.Name);
+        foreach (GeometryData.AttributeDefinition def in geometry.LoopAttributes) loopNames.Add(def.Name);
 
         var positions = new List<Float3>();
         var normals = new List<Float3>();
@@ -2239,26 +2239,26 @@ public static class MeshGeometry
         var deltaPositions = new List<List<Float3>>();
         var deltaNormals = new List<List<Float3>?>();
         var deltaTangents = new List<List<Float3>?>();
-        foreach (var names in frameNames)
+        foreach (FrameNames names in frameNames)
         {
-            deltaPositions.Add(new List<Float3>());
-            deltaNormals.Add(geometry.HasLoopAttribute(names.Normal) ? new List<Float3>() : null);
-            deltaTangents.Add(geometry.HasLoopAttribute(names.Tangent) ? new List<Float3>() : null);
+            deltaPositions.Add([]);
+            deltaNormals.Add(geometry.HasLoopAttribute(names.Normal) ? [] : null);
+            deltaTangents.Add(geometry.HasLoopAttribute(names.Tangent) ? [] : null);
         }
 
         var emitted = new Dictionary<GeometryData.Vertex, List<(GeometryData.Loop Loop, int Index)>>();
         int Emit(GeometryData.Loop loop)
         {
-            var vertex = loop.Vert;
-            if (!emitted.TryGetValue(vertex, out var list))
+            GeometryData.Vertex vertex = loop.Vert;
+            if (!emitted.TryGetValue(vertex, out List<(GeometryData.Loop Loop, int Index)>? list))
                 emitted[vertex] = list = new List<(GeometryData.Loop, int)>(1);
-            foreach (var (other, index) in list)
+            foreach ((GeometryData.Loop? other, int index) in list)
                 if (SameValues(other, loop, loopNames)) return index;
 
             int created = positions.Count;
             list.Add((loop, created));
 
-            var attributes = loop.Attributes;
+            Dictionary<string, GeometryData.AttributeValue> attributes = loop.Attributes;
             positions.Add(vertex.Point);
             if (hasNormals) normals.Add(Float3Of(attributes, Normal));
             if (hasTangents) tangents.Add(Float4Of(attributes, Tangent));
@@ -2271,7 +2271,7 @@ public static class MeshGeometry
             }
             if (hasSkin)
             {
-                var ids = attributes.TryGetValue(BoneIndices, out var value) && value is GeometryData.IntAttributeValue n ? n.Data : new int[4];
+                int[] ids = attributes.TryGetValue(BoneIndices, out GeometryData.AttributeValue? value) && value is GeometryData.IntAttributeValue n ? n.Data : new int[4];
                 boneIndices.Add(new Float4(ids[0], ids[1], ids[2], ids[3]));
                 boneWeights.Add(Float4Of(attributes, BoneWeights));
             }
@@ -2285,20 +2285,20 @@ public static class MeshGeometry
         }
 
         int subMeshCount = source != null ? source.SubMeshCount : 1;
-        foreach (var face in geometry.Faces)
+        foreach (GeometryData.Face face in geometry.Faces)
             subMeshCount = Math.Max(subMeshCount, SubMeshOf(face) + 1);
 
         var subIndices = new List<uint>[subMeshCount];
-        for (int s = 0; s < subMeshCount; s++) subIndices[s] = new List<uint>();
+        for (int s = 0; s < subMeshCount; s++) subIndices[s] = [];
 
-        foreach (var face in geometry.Faces)
+        foreach (GeometryData.Face face in geometry.Faces)
         {
             if (face.VertCount < 3 || face.Loop == null) continue;
 
             // Fan out faces with more than three corners
-            var target = subIndices[Math.Max(0, SubMeshOf(face))];
-            var first = face.Loop;
-            for (var loop = first.Next!; loop.Next != first; loop = loop.Next!)
+            List<uint> target = subIndices[Math.Max(0, SubMeshOf(face))];
+            GeometryData.Loop first = face.Loop;
+            for (GeometryData.Loop loop = first.Next!; loop.Next != first; loop = loop.Next!)
             {
                 target.Add((uint)Emit(first));
                 target.Add((uint)Emit(loop));
@@ -2317,11 +2317,11 @@ public static class MeshGeometry
             return mesh;
         }
 
-        mesh.Vertices = positions.ToArray();
-        if (hasNormals) mesh.Normals = normals.ToArray();
-        if (hasTangents) mesh.Tangents = tangents.ToArray();
-        if (hasUV) mesh.UV = uv.ToArray();
-        if (hasUV2) mesh.UV2 = uv2.ToArray();
+        mesh.Vertices = [.. positions];
+        if (hasNormals) mesh.Normals = [.. normals];
+        if (hasTangents) mesh.Tangents = [.. tangents];
+        if (hasUV) mesh.UV = [.. uv];
+        if (hasUV2) mesh.UV2 = [.. uv2];
         if (hasColor)
         {
             if (source != null && source.HasColors32 && !source.HasColors)
@@ -2333,13 +2333,13 @@ public static class MeshGeometry
             }
             else
             {
-                mesh.Colors = colors.ToArray();
+                mesh.Colors = [.. colors];
             }
         }
         if (hasSkin)
         {
-            mesh.BoneIndices = boneIndices.ToArray();
-            mesh.BoneWeights = boneWeights.ToArray();
+            mesh.BoneIndices = [.. boneIndices];
+            mesh.BoneWeights = [.. boneWeights];
         }
         if (frameCounts.Count > 0)
         {
@@ -2347,14 +2347,14 @@ public static class MeshGeometry
             int layer = 0;
             for (int s = 0; s < shapes.Length; s++)
             {
-                var shape = source != null && s < source.BlendShapes.Length ? source.BlendShapes[s] : null;
+                BlendShape? shape = source != null && s < source.BlendShapes.Length ? source.BlendShapes[s] : null;
                 shapes[s] = new BlendShape { Name = shape?.Name ?? $"Shape{s}", Frames = new BlendShapeFrame[frameCounts[s]] };
                 for (int f = 0; f < frameCounts[s]; f++, layer++)
                 {
                     shapes[s].Frames[f] = new BlendShapeFrame
                     {
                         Weight = shape != null && f < shape.Frames.Length ? shape.Frames[f].Weight : 100f,
-                        DeltaVertices = deltaPositions[layer].ToArray(),
+                        DeltaVertices = [.. deltaPositions[layer]],
                         DeltaNormals = deltaNormals[layer]?.ToArray(),
                         DeltaTangents = deltaTangents[layer]?.ToArray(),
                     };
@@ -2364,10 +2364,10 @@ public static class MeshGeometry
         }
 
         var all = new List<uint>();
-        foreach (var list in subIndices) all.AddRange(list);
+        foreach (List<uint> list in subIndices) all.AddRange(list);
         mesh.IndexFormat = positions.Count > ushort.MaxValue ? IndexFormat.UInt32 : IndexFormat.UInt16;
         mesh.MeshTopology = Topology.Triangles;
-        mesh.Indices = all.ToArray();
+        mesh.Indices = [.. all];
 
         int start = 0;
         mesh.SetSubMeshCount(subMeshCount);
@@ -2422,7 +2422,7 @@ public static class MeshGeometry
     }
 
     private static int SubMeshOf(GeometryData.Face face)
-        => face.Attributes.TryGetValue(SubMesh, out var value) && value is GeometryData.IntAttributeValue n && n.Data.Length > 0 ? n.Data[0] : 0;
+        => face.Attributes.TryGetValue(SubMesh, out GeometryData.AttributeValue? value) && value is GeometryData.IntAttributeValue n && n.Data.Length > 0 ? n.Data[0] : 0;
 
     private static byte ToByte(float value) => (byte)Math.Clamp(MathF.Round(value * 255f), 0f, 255f);
 
@@ -2430,8 +2430,8 @@ public static class MeshGeometry
     {
         foreach (string name in names)
         {
-            a.Attributes.TryGetValue(name, out var va);
-            b.Attributes.TryGetValue(name, out var vb);
+            a.Attributes.TryGetValue(name, out GeometryData.AttributeValue? va);
+            b.Attributes.TryGetValue(name, out GeometryData.AttributeValue? vb);
             if (va is GeometryData.FloatAttributeValue fa && vb is GeometryData.FloatAttributeValue fb)
             {
                 if (!fa.Data.AsSpan().SequenceEqual(fb.Data)) return false;
@@ -2449,7 +2449,7 @@ public static class MeshGeometry
     }
 
     private static float[]? Read(Dictionary<string, GeometryData.AttributeValue> attributes, string name)
-        => attributes.TryGetValue(name, out var value) && value is GeometryData.FloatAttributeValue f ? f.Data : null;
+        => attributes.TryGetValue(name, out GeometryData.AttributeValue? value) && value is GeometryData.FloatAttributeValue f ? f.Data : null;
 
     private static Float2 Float2Of(Dictionary<string, GeometryData.AttributeValue> attributes, string name)
         => Read(attributes, name) is { Length: >= 2 } d ? new Float2(d[0], d[1]) : Float2.Zero;
@@ -2465,31 +2465,31 @@ public static class MeshGeometry
 
     private static void Set(Dictionary<string, GeometryData.AttributeValue> attributes, string name, Float2 v)
     {
-        var d = Floats(attributes, name);
+        float[] d = Floats(attributes, name);
         d[0] = v.X; d[1] = v.Y;
     }
 
     private static void Set(Dictionary<string, GeometryData.AttributeValue> attributes, string name, Float3 v)
     {
-        var d = Floats(attributes, name);
+        float[] d = Floats(attributes, name);
         d[0] = v.X; d[1] = v.Y; d[2] = v.Z;
     }
 
     private static void Set(Dictionary<string, GeometryData.AttributeValue> attributes, string name, Float4 v)
     {
-        var d = Floats(attributes, name);
+        float[] d = Floats(attributes, name);
         d[0] = v.X; d[1] = v.Y; d[2] = v.Z; d[3] = v.W;
     }
 
     private static void Set(Dictionary<string, GeometryData.AttributeValue> attributes, string name, Color v)
     {
-        var d = Floats(attributes, name);
+        float[] d = Floats(attributes, name);
         d[0] = v.R; d[1] = v.G; d[2] = v.B; d[3] = v.A;
     }
 
     private static void Set(Dictionary<string, GeometryData.AttributeValue> attributes, string name, Color32 v)
     {
-        var d = Floats(attributes, name);
+        float[] d = Floats(attributes, name);
         d[0] = v.R / 255f; d[1] = v.G / 255f; d[2] = v.B / 255f; d[3] = v.A / 255f;
     }
 

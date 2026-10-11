@@ -55,9 +55,9 @@ public sealed class NebulaBackground
     {
         _paper = paper;
 
-        var cr = new[] { 0.42f, 0.40f, 0.40f, 0.30f };
-        var sx = new[] { 0.43f, 0.67f, 0.52f, 0.14f };
-        var sy = new[] { 0.37f, 0.55f, 0.92f, 0.60f };
+        float[] cr = new[] { 0.42f, 0.40f, 0.40f, 0.30f };
+        float[] sx = new[] { 0.43f, 0.67f, 0.52f, 0.14f };
+        float[] sy = new[] { 0.37f, 0.55f, 0.92f, 0.60f };
         for (int i = 0; i < 4; i++)
             _clouds[i] = new Cloud { cx = sx[i], cy = sy[i], ang = (float)(_rng.NextDouble() * MathF.Tau), rf = cr[i], phase = (float)(_rng.NextDouble() * 6.28f), timer = 0f };
 
@@ -101,7 +101,7 @@ public sealed class NebulaBackground
         nebula.ShowStarsAndComets = showStarsAndComets;
         nebula.Update(EditorTheme.AnimatedBackground ? dt * EditorTheme.BackgroundSpeed : 0f);
 
-        var box = paper.Box(id).PositionType(PositionType.SelfDirected).Position(0, 0).Size(w, h).IsNotInteractable();
+        ElementBuilder box = paper.Box(id).PositionType(PositionType.SelfDirected).Position(0, 0).Size(w, h).IsNotInteractable();
         if (EditorTheme.UsesNebulaBackground)
             box.OnPostLayout((hnd, rect) => paper.Draw(ref hnd, (canvas, r) => nebula.Draw(canvas, r)));
         else if (EditorTheme.BackgroundStyle == EditorBackgroundStyle.Gradient)
@@ -181,7 +181,7 @@ public sealed class NebulaBackground
     private void BuildStarTexture()
     {
         const int T = StarTexSize;
-        var data = new byte[T * T * 4];
+        byte[] data = new byte[T * T * 4];
         for (int s = 0; s < 170; s++)
         {
             float sx = (float)(_rng.NextDouble() * T), sy = (float)(_rng.NextDouble() * T);
@@ -220,7 +220,7 @@ public sealed class NebulaBackground
             RadialFill(vg, x, y, w, h, x + w * 0.7f, y + h * 0.2f, 0, big * 0.95f,
                 Col((int)(_primary.R * 0.16f), (int)(_primary.G * 0.17f), (int)(_primary.B * 0.19f), 1f), Col(5, 3, 12, 0f));
 
-            foreach (var c in _clouds)
+            foreach (Cloud c in _clouds)
             {
                 float rad = w * c.rf * (1f + 0.10f * MathF.Sin(t * 0.09f + c.phase));
                 RadialFill(vg, x, y, w, h, x + c.cx * w, y + c.cy * h, 0, rad, c.color, Color32.FromArgb(0, c.color));
@@ -238,7 +238,7 @@ public sealed class NebulaBackground
                     vg.DrawImage(_starTex, tx, ty, StarTexSize, StarTexSize);
 
         if (ShowStarsAndComets)
-            foreach (var c in _comets)
+            foreach (Comet c in _comets)
             {
                 if (!c.active) continue;
                 float env = MathF.Sin(c.life * MathF.PI);

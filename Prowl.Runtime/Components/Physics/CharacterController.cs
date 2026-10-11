@@ -119,12 +119,12 @@ public class CharacterController : Component
 
     private Rigidbody3D _selfBody;
     private bool _selfBodyResolved;
-    private readonly HashSet<Rigidbody3D> _ignoredBodies = new();
+    private readonly HashSet<Rigidbody3D> _ignoredBodies = [];
     private QueryFilter _filter;
 
-    private readonly List<ShapeCastHit> _hits = new();
-    private readonly List<ShapeCastHit> _overlaps = new();
-    private readonly List<ShapeCastHit> _groundHits = new();
+    private readonly List<ShapeCastHit> _hits = [];
+    private readonly List<ShapeCastHit> _overlaps = [];
+    private readonly List<ShapeCastHit> _groundHits = [];
     private readonly Float3[] _planes = new Float3[MaxPlanes];
     private CollisionFlags _flags;
     private Float3 _achievedVelocity;
@@ -247,12 +247,12 @@ public class CharacterController : Component
         {
             Float3 bottom = feet + _up * Radius;
             Float3 top = feet + _up * Maths.Max(Height - Radius, Radius + 0.001f);
-            var capsule = SupportPrimitives.CreateCapsule(Radius, Float3.Length(top - bottom) * 0.5f);
+            SupportPrimitives.Capsule capsule = SupportPrimitives.CreateCapsule(Radius, Float3.Length(top - bottom) * 0.5f);
             return NarrowPhase.MprEpa(shape, capsule, queryOrientation, Orientation.ToJitter(), queryPosition, ((top + bottom) * 0.5f).ToJitter(),
                 out _, out _, out _, out _);
         }
 
-        var cylinder = SupportPrimitives.CreateCylinder(Radius, Height * 0.5f);
+        SupportPrimitives.Cylinder cylinder = SupportPrimitives.CreateCylinder(Radius, Height * 0.5f);
         return NarrowPhase.MprEpa(shape, cylinder, queryOrientation, Orientation.ToJitter(), queryPosition, ShapeCenter(feet).ToJitter(),
             out _, out _, out _, out _);
     }

@@ -22,7 +22,7 @@ public class DefaultInputHandler : IInputHandler, IDisposable
 
     // Enum.GetValues builds a new array on every call, and these are walked every frame.
     // Distinct drops aliases like D0, which would otherwise update the same key twice a frame and hide its press.
-    private static readonly KeyCode[] s_keyCodes = Enum.GetValues<KeyCode>().Distinct().ToArray();
+    private static readonly KeyCode[] s_keyCodes = [.. Enum.GetValues<KeyCode>().Distinct()];
     private static readonly MouseButton[] s_mouseButtons = Enum.GetValues<MouseButton>();
     private static readonly GamepadButton[] s_gamepadButtons = Enum.GetValues<GamepadButton>();
     public IReadOnlyList<IJoystick> Joysticks => Context.Joysticks;
@@ -192,7 +192,7 @@ public class DefaultInputHandler : IInputHandler, IDisposable
             {
                 wasKeyPressed[key] = isKeyPressed[key];
                 isKeyPressed[key] = false;
-                var keyboards = Keyboards;
+                IReadOnlyList<IKeyboard> keyboards = Keyboards;
                 for (int k = 0; k < keyboards.Count; k++)
                     if (keyboards[k].IsKeyPressed((Silk.NET.Input.Key)key))
                     {
@@ -211,7 +211,7 @@ public class DefaultInputHandler : IInputHandler, IDisposable
             {
                 wasMousePressed[button] = isMousePressed[button];
                 isMousePressed[button] = false;
-                var mice = Mice;
+                IReadOnlyList<IMouse> mice = Mice;
                 for (int m = 0; m < mice.Count; m++)
                     if (mice[m].IsButtonPressed((Silk.NET.Input.MouseButton)button))
                     {
@@ -263,8 +263,8 @@ public class DefaultInputHandler : IInputHandler, IDisposable
 
     // TryGetValue (not the indexer) so an unmapped key/button - e.g. KeyCode.Unknown, which isn't in
     // the dictionaries - returns false instead of throwing KeyNotFoundException.
-    private static bool Down(Dictionary<KeyCode, bool> map, KeyCode key) => map.TryGetValue(key, out var v) && v;
-    private static bool Down(Dictionary<MouseButton, bool> map, MouseButton btn) => map.TryGetValue(btn, out var v) && v;
+    private static bool Down(Dictionary<KeyCode, bool> map, KeyCode key) => map.TryGetValue(key, out bool v) && v;
+    private static bool Down(Dictionary<MouseButton, bool> map, MouseButton btn) => map.TryGetValue(btn, out bool v) && v;
 
     public bool GetKey(KeyCode key) => Down(isKeyPressed, key);
 

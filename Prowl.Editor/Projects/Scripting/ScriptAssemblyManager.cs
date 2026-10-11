@@ -36,10 +36,10 @@ public static class ScriptAssemblyManager
     // Raw IL bytes of each loaded user assembly, kept so hot reload can read a swapped assembly's IL with
     // Cecil (for lambda/closure migration). Keyed weakly so an unloaded assembly's bytes can be collected.
     [Prowl.Ember.ReloadIgnore]
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, byte[]> s_assemblyBytes = new();
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, byte[]> s_assemblyBytes = [];
 
     /// <summary>The raw IL bytes an assembly was loaded from, or null if it wasn't loaded through here.</summary>
-    internal static byte[]? GetAssemblyBytes(Assembly asm) => s_assemblyBytes.TryGetValue(asm, out var bytes) ? bytes : null;
+    internal static byte[]? GetAssemblyBytes(Assembly asm) => s_assemblyBytes.TryGetValue(asm, out byte[]? bytes) ? bytes : null;
 
     // Plugin resolution state, refreshed each time assemblies are (re)loaded.
     private static readonly Dictionary<string, string> s_managedPlugins = new(StringComparer.OrdinalIgnoreCase);
@@ -68,13 +68,13 @@ public static class ScriptAssemblyManager
     {
         var live = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var asm in s_scriptAssemblies)
+        foreach (Assembly asm in s_scriptAssemblies)
         {
             live.Add(asm.GetName().Name ?? string.Empty);
             yield return asm;
         }
 
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             if (s_scriptAssemblies.Contains(asm)) continue;
 
@@ -148,7 +148,7 @@ public static class ScriptAssemblyManager
 
         _recompileRequested = false;
 
-        var project = Project.Current;
+        Project project = Project.Current;
         bool hasScripts = Directory.Exists(project.AssetsPath) &&
             Directory.EnumerateFiles(project.AssetsPath, "*.cs", SearchOption.AllDirectories).Any();
         bool hasPackages = ScriptCompiler.ProjectDeclaresPackages(project);
@@ -260,9 +260,9 @@ public static class ScriptAssemblyManager
     /// </summary>
     public static IEnumerable<Assembly> GetAllRelevantAssemblies()
     {
-        foreach (var asm in s_scriptAssemblies)
+        foreach (Assembly asm in s_scriptAssemblies)
             yield return asm;
-        foreach (var asm in AssemblyLoadContext.Default.Assemblies)
+        foreach (Assembly asm in AssemblyLoadContext.Default.Assemblies)
             yield return asm;
     }
 
@@ -272,8 +272,8 @@ public static class ScriptAssemblyManager
     /// </summary>
     public static IEnumerable<Type> GetAllTypes()
     {
-        foreach (var assembly in GetAllRelevantAssemblies())
-            foreach (var type in RuntimeUtils.GetLoadableTypes(assembly))
+        foreach (Assembly assembly in GetAllRelevantAssemblies())
+            foreach (Type type in RuntimeUtils.GetLoadableTypes(assembly))
                 yield return type;
     }
 
@@ -295,7 +295,7 @@ public static class ScriptAssemblyManager
         }
 
         // Load every produced user assembly in dependency order.
-        foreach (var dll in ScriptCompiler.GetEditorAssemblyPaths(project))
+        foreach (string dll in ScriptCompiler.GetEditorAssemblyPaths(project))
             LoadAssembly(dll, Path.GetFileNameWithoutExtension(dll));
     }
 
@@ -312,12 +312,12 @@ public static class ScriptAssemblyManager
         try
         {
             if (Directory.Exists(s_pluginLoadDir))
-                foreach (var f in Directory.EnumerateFiles(s_pluginLoadDir))
+                foreach (string f in Directory.EnumerateFiles(s_pluginLoadDir))
                     try { File.Delete(f); } catch { }
         }
         catch { }
 
-        foreach (var plugin in PluginScanner.ScanAll(project))
+        foreach (PluginInfo plugin in PluginScanner.ScanAll(project))
         {
             if (plugin.IsManaged)
                 s_managedPlugins[Path.GetFileNameWithoutExtension(plugin.FileName)] = plugin.AbsolutePath;
@@ -330,7 +330,7 @@ public static class ScriptAssemblyManager
 
     private static Assembly? ResolveManagedPlugin(AssemblyLoadContext context, AssemblyName name)
     {
-        if (name.Name == null || !s_managedPlugins.TryGetValue(name.Name, out var path) || !File.Exists(path))
+        if (name.Name == null || !s_managedPlugins.TryGetValue(name.Name, out string? path) || !File.Exists(path))
             return null;
 
         try
@@ -355,7 +355,7 @@ public static class ScriptAssemblyManager
     private static IntPtr ResolveNativePlugin(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
     {
         string requested = libraryName;
-        foreach (var plugin in s_nativePlugins)
+        foreach (PluginInfo plugin in s_nativePlugins)
         {
             string stem = Path.GetFileNameWithoutExtension(plugin.FileName);
             if (stem.StartsWith("lib", StringComparison.Ordinal)) stem = stem[3..];
@@ -374,13 +374,13 @@ public static class ScriptAssemblyManager
     private static List<Assembly> LoadAssembliesInto(Project project, AssemblyLoadContext context)
     {
         var loaded = new List<Assembly>();
-        foreach (var dll in ScriptCompiler.GetEditorAssemblyPaths(project))
+        foreach (string dll in ScriptCompiler.GetEditorAssemblyPaths(project))
         {
             if (!File.Exists(dll)) continue;
 
             byte[] bytes = File.ReadAllBytes(dll);
             using var stream = new MemoryStream(bytes);
-            var asm = context.LoadFromStream(stream);
+            Assembly asm = context.LoadFromStream(stream);
             s_assemblyBytes.AddOrUpdate(asm, bytes);
             loaded.Add(asm);
 
@@ -401,7 +401,7 @@ public static class ScriptAssemblyManager
             // still resolve to user source lines.
             byte[] bytes = File.ReadAllBytes(dllPath);
             using var stream = new MemoryStream(bytes);
-            var asm = s_scriptContext.LoadFromStream(stream);
+            Assembly asm = s_scriptContext.LoadFromStream(stream);
             s_assemblyBytes.AddOrUpdate(asm, bytes);
             s_scriptAssemblies.Add(asm);
 
@@ -447,7 +447,7 @@ public static class ScriptAssemblyManager
     {
         try
         {
-            var scene = Scene.Current;
+            Scene scene = Scene.Current;
             AssemblyLoadContext oldContext = s_scriptContext!;
             var oldAssemblies = s_scriptAssemblies.ToList();
 
@@ -456,7 +456,7 @@ public static class ScriptAssemblyManager
             var newContext = new AssemblyLoadContext("ProwlScripts", isCollectible: true);
             newContext.Resolving += ResolveManagedPlugin;
 
-            var newAssemblies = LoadAssembliesInto(project, newContext);
+            List<Assembly> newAssemblies = LoadAssembliesInto(project, newContext);
             if (newAssemblies.Count == 0)
             {
                 try { newContext.Unload(); } catch { }
@@ -474,7 +474,7 @@ public static class ScriptAssemblyManager
             if (scene != null)
             {
                 var pairs = new List<(Assembly, Assembly)>();
-                foreach (var oldAsm in oldAssemblies)
+                foreach (Assembly? oldAsm in oldAssemblies)
                 {
                     string? name = oldAsm.GetName().Name;
                     Assembly? match = newAssemblies.FirstOrDefault(a => a.GetName().Name == name);

@@ -143,7 +143,7 @@ public class GameObjectCloneTests : RuntimeTestBase
 
         GameObject clone = ObjectCopy.Clone(source);
 
-        List<Marker> markers = clone.GetComponents<Marker>().ToList();
+        List<Marker> markers = [.. clone.GetComponents<Marker>()];
         Assert.Equal(2, markers.Count);
         Assert.Equal(1, markers[0].Number);
         Assert.Equal(2, markers[1].Number);
@@ -288,7 +288,7 @@ public class GameObjectCloneTests : RuntimeTestBase
     [Fact]
     public void Clone_IsDetachedFromAnyScene()
     {
-        var scene = CreateScene();
+        Scene scene = CreateScene();
         GameObject source = Build("root", out _);
         scene.Add(source);
 
@@ -408,7 +408,7 @@ public class GameObjectCloneTests : RuntimeTestBase
     [Fact]
     public void CopyTo_LeavesTheTargetInItsScene()
     {
-        var scene = CreateScene();
+        Scene scene = CreateScene();
         GameObject source = Build("source", out _);
         GameObject target = Build("target", out _);
         scene.Add(target);
@@ -547,7 +547,7 @@ public class GameObjectCloneTests : RuntimeTestBase
     [Fact]
     public void Instantiate_RunsTheLifecycleOnTheCopy()
     {
-        var scene = CreateScene();
+        Scene scene = CreateScene();
         Scene.Load(scene);
         Scene.ProcessPendingLoad();
 
@@ -569,7 +569,7 @@ public class GameObjectCloneTests : RuntimeTestBase
     [Fact]
     public void Instantiate_IntoAParentPlacesItRelativeToThatParent()
     {
-        var scene = CreateScene();
+        Scene scene = CreateScene();
         Scene.Load(scene);
         Scene.ProcessPendingLoad();
 

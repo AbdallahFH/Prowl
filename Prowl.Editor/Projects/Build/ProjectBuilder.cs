@@ -33,7 +33,7 @@ public static class ProjectBuilder
                 Type = BuildSettingsPanel.BuildStatusReport.BuildStatusReportType.Info,
                 Message = message,
             };
-            var serializedOutput = Serializer.Serialize(logMessage).WriteToString();
+            string serializedOutput = Serializer.Serialize(logMessage).WriteToString();
             string serializedBase64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(serializedOutput));
             Console.WriteLine(serializedBase64);
         }
@@ -69,7 +69,7 @@ public static class ProjectBuilder
                 Message = message,
                 Progress = progress
             };
-            var serializedOutput = Serializer.Serialize(logMessage).WriteToString();
+            string serializedOutput = Serializer.Serialize(logMessage).WriteToString();
             string serializedBase64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(serializedOutput));
             Console.WriteLine(serializedBase64);
         }
@@ -101,9 +101,9 @@ public static class ProjectBuilder
             try
             {
                 Console.WriteLine($"[BEGIN]{args.Data}[END]");
-                var serializedData = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(args.Data));
+                string serializedData = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(args.Data));
                 var echoData = EchoObject.ReadFromString(serializedData);
-                var logData = Serializer.Deserialize<BuildSettingsPanel.BuildStatusReport>(echoData);
+                BuildSettingsPanel.BuildStatusReport? logData = Serializer.Deserialize<BuildSettingsPanel.BuildStatusReport>(echoData);
 
                 if (logData != null)
                 {
@@ -188,7 +188,7 @@ public static class ProjectBuilder
         settings.OutputDirectory = outputPath;
         EditorRegistries.SaveSettings();
 
-        var pipeline = CreateSelectedPipeline(settings);
+        BuildPipeline? pipeline = CreateSelectedPipeline(settings);
         if (pipeline == null)
         {
             Runtime.Debug.LogError($"[Build] Build pipeline '{settings.SelectedPipeline}' was not found.");
@@ -202,7 +202,7 @@ public static class ProjectBuilder
         Runtime.Debug.Log($"[Build] Starting {pipeline.DisplayName} build to {outputPath}...", LogSeverity.Normal);
 
         var progress = new BuildProgress();
-        var projectPath = Project.Current?.RootPath ?? "";
+        string projectPath = Project.Current?.RootPath ?? "";
 
         // In the editor the build runs beside the frame loop, which publishes any asset it loads. A command line
         // build blocks the main thread instead, so it builds there.
@@ -230,7 +230,7 @@ public static class ProjectBuilder
     {
         var found = new List<BuildPipeline>();
 
-        foreach (var type in EditorUtils.GetAllTypes())
+        foreach (Type type in EditorUtils.GetAllTypes())
         {
             if (type.IsAbstract || !type.IsSubclassOf(typeof(BuildPipeline))) continue;
 
@@ -246,10 +246,9 @@ public static class ProjectBuilder
         }
 
         // Type enumeration promises no order, and the first entry is what a fresh project defaults to.
-        return found
+        return [.. found
             .OrderBy(p => p.DisplayName, StringComparer.Ordinal)
-            .ThenBy(p => p.GetType().FullName, StringComparer.Ordinal)
-            .ToList();
+            .ThenBy(p => p.GetType().FullName, StringComparer.Ordinal)];
     }
 
     /// <summary>The pipeline the Build window selected, or the desktop one when nothing is stored.</summary>
@@ -269,7 +268,7 @@ public static class ProjectBuilder
         try
         {
             Console.WriteLine($"[BEGIN]{projectPath}[END]");
-            var result = pipeline.BuildAsync(
+            BuildResult result = pipeline.BuildAsync(
                 projectPath, settings, outputPath, progress, progress.Token).GetAwaiter().GetResult();
             progress.Complete(result);
 
