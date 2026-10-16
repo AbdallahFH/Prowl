@@ -350,17 +350,24 @@ Check our [Contributing guide](https://github.com/ProwlEngine/Prowl/blob/main/CO
                 </a>
             </td>
             <td align="center">
-                <a href="https://github.com/japsuu">
-                    <img src="https://avatars.githubusercontent.com/u/55388432?v=4" width="100;" alt="japsuu"/>
-                    <br />
-                    <sub><b>Jasper Honkasalo</b></sub>
-                </a>
-            </td>
-            <td align="center">
                 <a href="https://github.com/paulbartrum">
                     <img src="https://avatars.githubusercontent.com/u/1572571?v=4" width="100;" alt="paulbartrum"/>
                     <br />
                     <sub><b>paulbartrum</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/mrunion">
+                    <img src="https://avatars.githubusercontent.com/u/5022458?v=4" width="100;" alt="mrunion"/>
+                    <br />
+                    <sub><b>Matt Runion</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/japsuu">
+                    <img src="https://avatars.githubusercontent.com/u/55388432?v=4" width="100;" alt="japsuu"/>
+                    <br />
+                    <sub><b>Jasper Honkasalo</b></sub>
                 </a>
             </td>
             <td align="center">
@@ -377,6 +384,8 @@ Check our [Contributing guide](https://github.com/ProwlEngine/Prowl/blob/main/CO
                     <sub><b>draxxris</b></sub>
                 </a>
             </td>
+		</tr>
+		<tr>
             <td align="center">
                 <a href="https://github.com/JothamR">
                     <img src="https://avatars.githubusercontent.com/u/5410231?v=4" width="100;" alt="JothamR"/>
@@ -384,8 +393,6 @@ Check our [Contributing guide](https://github.com/ProwlEngine/Prowl/blob/main/CO
                     <sub><b>Jotham</b></sub>
                 </a>
             </td>
-		</tr>
-		<tr>
             <td align="center">
                 <a href="https://github.com/notgiven688">
                     <img src="https://avatars.githubusercontent.com/u/37874600?v=4" width="100;" alt="notgiven688"/>
