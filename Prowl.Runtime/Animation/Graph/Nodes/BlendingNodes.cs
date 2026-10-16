@@ -83,7 +83,7 @@ public sealed class CrossfadeNode : AnimationGraphNode
     {
         int onWeight = ctx.Graph.AddFloatEase(ctx.Input(r, _active), r.Get(_seconds), r.Get(_easing));
         int offWeight = ctx.Graph.AddFloatMath(ctx.Graph.AddConstFloat(1f), onWeight, FloatMathOp.Subtract);
-        return ctx.Graph.AddWeightedBlend(new[] { new WeightedPose(ctx.Input(r, _off), FloatInput.From(offWeight)), new WeightedPose(ctx.Input(r, _on), FloatInput.From(onWeight)) });
+        return ctx.Graph.AddWeightedBlend(new[] { new WeightedPose(ctx.Input(r, _off), FloatInput.From(offWeight)), new WeightedPose(ctx.Input(r, _on), FloatInput.From(onWeight)) },true);
     }
 }
 
