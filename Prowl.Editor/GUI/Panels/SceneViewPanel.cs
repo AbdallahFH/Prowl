@@ -19,6 +19,7 @@ using Prowl.Vector;
 using Prowl.Vector.Spatial;
 
 using Color = System.Drawing.Color;
+using DebugViewMode = Prowl.Runtime.Rendering.DebugViewMode;
 using Gizmo = Prowl.OrigamiUI.Gizmo;
 
 namespace Prowl.Editor.GUI.Panels;
@@ -101,6 +102,8 @@ public class SceneViewPanel : DockPanel
                 _pendingLens = null;
             }
             if (_pendingGizmos is bool pz) { _editorCamera.ShowGizmos = pz; _pendingGizmos = null; }
+            if (_pendingPost is bool pp) { _editorCamera.PostProcessing = pp; _pendingPost = null; }
+            if (_pendingDebugView is DebugViewMode dv) { _editorCamera.DebugView = dv; _pendingDebugView = null; }
         }
         ActiveCamera = _editorCamera;
 
@@ -124,6 +127,16 @@ public class SceneViewPanel : DockPanel
                 b.Toggle(Loc.Get("scene.show_gizmos"),
                     () => { if (_editorCamera != null) _editorCamera.ShowGizmos = !_editorCamera.ShowGizmos; },
                     () => _editorCamera?.ShowGizmos ?? true);
+                b.Toggle(Loc.Get("scene.post_processing"),
+                    () => { if (_editorCamera != null) _editorCamera.PostProcessing = !_editorCamera.PostProcessing; },
+                    () => _editorCamera?.PostProcessing ?? true);
+                b.Submenu(Loc.Get("scene.debug_view"), sub =>
+                {
+                    foreach (DebugViewMode mode in Enum.GetValues<DebugViewMode>())
+                        sub.Toggle(Loc.Get($"scene.debug_view.{mode.ToString().ToLowerInvariant()}"),
+                            () => { if (_editorCamera != null) _editorCamera.DebugView = mode; },
+                            () => (_editorCamera?.DebugView ?? DebugViewMode.Lit) == mode);
+                });
 
                 if (_editorCamera != null)
                 {
@@ -201,7 +214,7 @@ public class SceneViewPanel : DockPanel
 
     // Floating transform-tools panel, top-left of the viewport. The active scene-view
     // editor may replace the default gizmo-mode buttons with its own toolbar.
-    private void DrawTransformTools(Paper paper, Scribe.FontFile font)
+    private void DrawTransformTools(Paper paper)
     {
         using (paper.Column("sv_tools")
             .PositionType(PositionType.SelfDirected)
@@ -215,7 +228,7 @@ public class SceneViewPanel : DockPanel
             // The viewport owns the strip and draws the built-in buttons, so they exist even with no
             // tool doing anything. Live tools append their own; a tool can also replace the built-ins.
             if (!SceneToolManager.AnyOverridesToolStrip())
-                DrawDefaultToolbar(paper, font);
+                DrawDefaultToolbar(paper);
 
             foreach (SceneTool tool in SceneToolManager.Live)
             {
@@ -225,52 +238,25 @@ public class SceneViewPanel : DockPanel
         }
     }
 
-    private void DrawDefaultToolbar(Paper paper, Scribe.FontFile font)
+    private void DrawDefaultToolbar(Paper paper)
     {
         bool isTranslate = SceneTools.Transform == TransformTool.Translate;
         bool isRotate = SceneTools.Transform == TransformTool.Rotate;
         bool isScale = SceneTools.Transform == TransformTool.Scale;
         bool isUniversal = SceneTools.Transform == TransformTool.Universal;
 
-        paper.Box("sv_move_btn")
-            .Tooltip(ShortcutManager.GetTooltip(Loc.Get("scene.tool_move"), "Scene/ToolTranslate"))
-            .Width(UnitValue.StretchOne).Height(30).Rounded(EditorTheme.Roundness)
-            .Cursor(PaperCursor.Pointer)
-            .BackgroundColor(isTranslate ? EditorTheme.Purple400 : Color.Transparent)
-            .Hovered.BackgroundColor(isTranslate ? EditorTheme.Purple400 : EditorTheme.Hover).End()
-            .Text(EditorIcons.ArrowsUpDownLeftRight, font).TextColor(EditorTheme.Ink500)
-            .FontSize(11f).Alignment(TextAlignment.MiddleCenter)
-            .OnClick(0, (_, _) => SetGizmoMode(TransformTool.Translate));
-
-        paper.Box("sv_rotate_btn")
-            .Tooltip(ShortcutManager.GetTooltip(Loc.Get("scene.tool_rotate"), "Scene/ToolRotate"))
-            .Width(UnitValue.StretchOne).Height(30).Rounded(EditorTheme.Roundness)
-            .Cursor(PaperCursor.Pointer)
-            .BackgroundColor(isRotate ? EditorTheme.Purple400 : Color.Transparent)
-            .Hovered.BackgroundColor(isRotate ? EditorTheme.Purple400 : EditorTheme.Hover).End()
-            .Text(EditorIcons.ArrowsRotate, font).TextColor(EditorTheme.Ink500)
-            .FontSize(11f).Alignment(TextAlignment.MiddleCenter)
-            .OnClick(0, (_, _) => SetGizmoMode(TransformTool.Rotate));
-
-        paper.Box("sv_scale_btn")
-            .Tooltip(ShortcutManager.GetTooltip(Loc.Get("scene.tool_scale"), "Scene/ToolScale"))
-            .Width(UnitValue.StretchOne).Height(30).Rounded(EditorTheme.Roundness)
-            .Cursor(PaperCursor.Pointer)
-            .BackgroundColor(isScale ? EditorTheme.Purple400 : Color.Transparent)
-            .Hovered.BackgroundColor(isScale ? EditorTheme.Purple400 : EditorTheme.Hover).End()
-            .Text(EditorIcons.Maximize, font).TextColor(EditorTheme.Ink500)
-            .FontSize(11f).Alignment(TextAlignment.MiddleCenter)
-            .OnClick(0, (_, _) => SetGizmoMode(TransformTool.Scale));
-
-        paper.Box("sv_universal_btn")
-            .Tooltip(ShortcutManager.GetTooltip(Loc.Get("scene.tool_universal"), "Scene/ToolUniversal"))
-            .Width(UnitValue.StretchOne).Height(30).Rounded(EditorTheme.Roundness)
-            .Cursor(PaperCursor.Pointer)
-            .BackgroundColor(isUniversal ? EditorTheme.Purple400 : Color.Transparent)
-            .Hovered.BackgroundColor(isUniversal ? EditorTheme.Purple400 : EditorTheme.Hover).End()
-            .Text(EditorIcons.Expand, font).TextColor(EditorTheme.Ink500)
-            .FontSize(11f).Alignment(TextAlignment.MiddleCenter)
-            .OnClick(0, (_, _) => SetGizmoMode(TransformTool.Universal));
+        EditorGUI.ToolStripButton(paper, "sv_move_btn", EditorIcons.ArrowsUpDownLeftRight_I,
+            ShortcutManager.GetTooltip(Loc.Get("scene.tool_move"), "Scene/ToolTranslate"), isTranslate,
+            () => SetGizmoMode(TransformTool.Translate));
+        EditorGUI.ToolStripButton(paper, "sv_rotate_btn", EditorIcons.ArrowsRotate_I,
+            ShortcutManager.GetTooltip(Loc.Get("scene.tool_rotate"), "Scene/ToolRotate"), isRotate,
+            () => SetGizmoMode(TransformTool.Rotate));
+        EditorGUI.ToolStripButton(paper, "sv_scale_btn", EditorIcons.Maximize_I,
+            ShortcutManager.GetTooltip(Loc.Get("scene.tool_scale"), "Scene/ToolScale"), isScale,
+            () => SetGizmoMode(TransformTool.Scale));
+        EditorGUI.ToolStripButton(paper, "sv_universal_btn", EditorIcons.Expand_I,
+            ShortcutManager.GetTooltip(Loc.Get("scene.tool_universal"), "Scene/ToolUniversal"), isUniversal,
+            () => SetGizmoMode(TransformTool.Universal));
     }
 
     private void DrawViewport(Paper paper, Scribe.FontFile font, float width, float height)
@@ -400,9 +386,7 @@ public class SceneViewPanel : DockPanel
                         // only the bottom two are rounded.
                         float rnd = EditorTheme.Roundness;
 
-                        // Draw RT with flipped Y OpenGL RT has Y=0 at bottom
                         canvas.SetBrushTexture(rt.MainTexture);
-                        // TextureTransform maps screen rect to UV: flip V by translating +1 and scaling -1 on Y
                         canvas.SetBrushTextureTransform(
                             Transform2D.CreateTranslation(rx, ry + rh) *
                             Transform2D.CreateScale(rw, -rh));
@@ -545,7 +529,7 @@ public class SceneViewPanel : DockPanel
             }
 
             // Floating transform-tools panel (top-left)
-            DrawTransformTools(paper, font);
+            DrawTransformTools(paper);
 
             // Speed indicator (shows briefly when scroll changes fly speed)
             DrawSpeedIndicator(paper, font, width, height);
@@ -724,6 +708,8 @@ public class SceneViewPanel : DockPanel
         state["far"] = _editorCamera.FarClip;
         state["speed"] = _editorCamera.MoveSpeed;
         state["gizmos"] = _editorCamera.ShowGizmos;
+        state["post"] = _editorCamera.PostProcessing;
+        state["debugView"] = _editorCamera.DebugView.ToString();
         state["navAlwaysShow"] = NavMeshDebugDisplay.AlwaysShow;
         state["navShowDetail"] = NavMeshDebugDisplay.ShowDetail;
         state["navShowVertices"] = NavMeshDebugDisplay.ShowVertices;
@@ -745,6 +731,8 @@ public class SceneViewPanel : DockPanel
         _pendingLens = (state["fov"]?.GetValue<float>(), state["near"]?.GetValue<float>(),
                         state["far"]?.GetValue<float>(), state["speed"]?.GetValue<float>());
         _pendingGizmos = state["gizmos"]?.GetValue<bool>();
+        _pendingPost = state["post"]?.GetValue<bool>();
+        _pendingDebugView = Enum.TryParse(state["debugView"]?.GetValue<string>(), out DebugViewMode debugView) ? debugView : null;
 
         NavMeshDebugDisplay.AlwaysShow = state["navAlwaysShow"]?.GetValue<bool>() ?? false;
         NavMeshDebugDisplay.ShowDetail = state["navShowDetail"]?.GetValue<bool>() ?? false;
@@ -754,6 +742,8 @@ public class SceneViewPanel : DockPanel
     private bool? _pendingGrid;
     private (float? Fov, float? Near, float? Far, float? Speed)? _pendingLens;
     private bool? _pendingGizmos;
+    private bool? _pendingPost;
+    private DebugViewMode? _pendingDebugView;
 
     /// <summary>
     /// Raycast into the scene to find a drop position. Falls back to the XZ plane at Y=0.

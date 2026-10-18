@@ -525,6 +525,12 @@ public class TerrainEditor : CustomEditor
         EditorGUI.Row(paper, $"{id}_treedist", "Tree View Distance", () =>
             Origami.Slider(paper, $"{id}_treedist_v", terrain.TreeDistance,
                 v => { terrain.TreeDistance = MathF.Max(1f, v); }, 50f, 2000f).Format("F0").Show());
+
+        EditorGUI.SectionHeader(paper, $"{id}_shh", "Shadows");
+        EditorGUI.Row(paper, $"{id}_cast", "Shadow Casting", () =>
+            Origami.EnumDropdown(paper, $"{id}_cast_v", terrain.ShadowCasting, v => terrain.ShadowCasting = v).Show());
+        EditorGUI.Row(paper, $"{id}_recv", "Receive Shadows", () =>
+            Origami.Checkbox(paper, $"{id}_recv_v", terrain.ReceiveShadows, v => terrain.ReceiveShadows = v).Show());
     }
 
     /// <summary>Size / Strength / Falloff sliders (design .tr-brushrow).</summary>
@@ -563,15 +569,12 @@ public class TerrainEditor : CustomEditor
     /// <summary>Small 20x20 glass icon button (design .tr-mini).</summary>
     private static void MiniButton(Paper paper, string id, IOrigamiIcon icon, Action onClick, bool danger = false, bool enabled = true)
     {
-        ElementBuilder b = paper.Box(id).Width(20).Height(20).Rounded(Origami.Current.Metrics.SmallRounding)
-            .Margin(0, 0, UnitValue.Stretch(), UnitValue.Stretch())
-            .BackgroundColor(EditorTheme.Glass).BorderColor(EditorTheme.BorderSoft).BorderWidth(1);
-        if (enabled)
+        using (paper.Box($"{id}_w").Width(UnitValue.Auto).Height(UnitValue.Auto).Margin(0, 0, UnitValue.Stretch(), UnitValue.Stretch()).Enter())
         {
-            b.Hovered.BackgroundColor(danger ? EditorTheme.WithAlpha(EditorTheme.Red400, 41) : EditorTheme.Hover).End();
-            b.OnClick(_ => onClick());
+            ButtonBuilder b = Origami.IconButton(paper, id, icon, onClick).Small().Width(20).Height(20).Soft().Disabled(!enabled);
+            if (danger) b.Danger();
+            b.Show();
         }
-        b.Icon(paper, icon, enabled ? EditorTheme.Ink400 : EditorTheme.InkFaint, size: 12f);
     }
 
     /// <summary>Blue info pill (design .tr-hint).</summary>

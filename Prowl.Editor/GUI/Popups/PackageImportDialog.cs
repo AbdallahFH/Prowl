@@ -339,13 +339,7 @@ public static class PackageImportDialog
 
             paper.Box("pkgimp_title_spacer").Width(UnitValue.Stretch());
 
-            paper.Box("pkgimp_close")
-                .Size(32)
-                .Text(EditorIcons.Xmark, font).TextColor(EditorTheme.Ink400)
-                .FontSize(EditorTheme.FontSize).Alignment(TextAlignment.MiddleCenter)
-                .Hovered.BackgroundColor(EditorTheme.Ink200).End()
-                .Rounded(Origami.Current.Metrics.Rounding)
-                .OnClick((_) => Close());
+            Origami.IconButton(paper, "pkgimp_close", EditorIcons.Xmark_I, Close).Ghost().Show();
         }
     }
 
@@ -666,9 +660,8 @@ public static class PackageImportDialog
             byte[] pixels = new byte[data.Length - 8];
             Buffer.BlockCopy(data, 8, pixels, 0, pixels.Length);
 
-            var tex = new Texture2D((uint)w, (uint)h, false, TextureImageFormat.Color4b);
+            var tex = new Texture2D((uint)w, (uint)h);
             tex.SetData<byte>(pixels);
-            tex.SetTextureFilters(TextureMin.Linear, TextureMag.Linear);
             _thumbCache[assetPath] = tex;
             return tex;
         }

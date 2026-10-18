@@ -85,6 +85,9 @@ public class InspectorPanel : DockPanel
     private AssetEntry? _openEntry;
     private EngineObject? _openAsset;
 
+    // The asset editor drawn this frame, which gets to draw over the inspector after the scroll view.
+    private AssetImporterEditor? _overlayEditor;
+
     // What the inspector was showing, and whether the unapplied-changes prompt is up. While it is, the
     // selection change is held: the inspector keeps drawing the asset the prompt is about, so the choice
     // is made against what is on screen rather than behind a dialog for something already gone.
@@ -237,6 +240,7 @@ public class InspectorPanel : DockPanel
             _subscribed = true;
         }
 
+        _overlayEditor = null;
         Origami.ScrollView(paper, "insp_scroll", width, height).Padding(0, 0, 0, 0).Body(() =>
         {
             // Determine what to inspect: current selection, unless it's a folder
@@ -285,7 +289,8 @@ public class InspectorPanel : DockPanel
                 if (active is ContentItem contentItem)
                 {
                     DrawAssetHeader(paper, font, contentItem);
-                    Origami.Separator(paper, "insp_sep_header").Show();
+                    EditorGUI.Divider(paper, "insp_sep_header");
+                    paper.Box("insp_sep_gap").Height(Origami.Current.Metrics.PaddingLarge).IsNotInteractable();
                     DrawAssetInspector(paper, font, contentItem);
                 }
                 else
@@ -329,6 +334,12 @@ public class InspectorPanel : DockPanel
 
         // Drag a script (.cs) from the Project panel onto the inspector to add it as a component.
         DrawScriptComponentDropZone(paper, font, width, height);
+
+        try { _overlayEditor?.OnPanelOverlay(paper, "insp_asset_overlay", width, height); }
+        catch (Exception ex)
+        {
+            Runtime.Debug.LogError($"[Inspector] Asset editor overlay threw and was skipped: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -389,13 +400,14 @@ public class InspectorPanel : DockPanel
         string name = ci.Name;
         string typeName = ci.IsFolder ? Loc.Get("inspector.folder") : ci.TypeLabel;
 
+        OrigamiMetrics m = Origami.Current.Metrics;
         using (paper.Row("insp_header")
-            .Height(40).Padding(4, 0, 4, 4).Gap(8)
+            .Height(56).Padding(m.PaddingLarge, m.PaddingLarge, 0, 0).Gap(10)
             .Enter())
         {
             // Large icon
             paper.Box("insp_h_icon")
-                .Width(32).Height(32)
+                .Width(36).Height(36).Margin(0, 0, UnitValue.StretchOne, UnitValue.StretchOne)
                 .BackgroundColor(EditorTheme.Hover)
                 .Rounded(EditorTheme.Roundness)
                 .Text(icon, font)
@@ -403,17 +415,18 @@ public class InspectorPanel : DockPanel
                 .FontSize(18f)
                 .Alignment(TextAlignment.MiddleCenter);
 
-            using (paper.Column("insp_h_info").Height(32).Gap(1).Enter())
+            using (paper.Column("insp_h_info").Height(UnitValue.Auto).Gap(2)
+                .Margin(0, 0, UnitValue.StretchOne, UnitValue.StretchOne).Enter())
             {
                 paper.Box("insp_h_name")
-                    .Height(18)
+                    .Height(22)
                     .Text(name, font)
                     .TextColor(EditorTheme.Ink500)
                     .FontSize(EditorTheme.FontSize)
                     .Alignment(TextAlignment.MiddleLeft);
 
                 paper.Box("insp_h_type")
-                    .Height(14)
+                    .Height(18)
                     .Text(typeName, font)
                     .TextColor(EditorTheme.Ink400)
                     .FontSize(EditorTheme.FontSizeSmall)
@@ -455,6 +468,7 @@ public class InspectorPanel : DockPanel
                 _openEntry = entry;
                 _openAsset = asset;
 
+                _overlayEditor = assetEditor;
                 try { assetEditor.OnGUI(paper, "insp_asset_editor", entry, asset); }
                 catch (Exception ex)
                 {

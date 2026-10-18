@@ -50,10 +50,10 @@ public class EditorApplication : Game
 
     private GUI.NebulaBackground? _nebula;
     private double _introTime = double.MaxValue;
-    private const double IntroCloseDuration = 2.0; // bars close over launcher
-    private const double IntroBrandStart = 0.5;    // logo starts spinning in while the bars close
-    private const double IntroOpenStart = 4.5;     // bars open once the logo animation has played
-    private const double IntroOpenDuration = 2.5;  // bars open revealing editor
+    private const double IntroCloseDuration = 1.6; // bars close over launcher
+    private const double IntroBrandStart = 0.4;    // logo starts spinning in while the bars close
+    private const double IntroOpenStart = 3.95;    // bars open once the logo animation has played
+    private const double IntroOpenDuration = 1.55; // bars open revealing editor
     private const double IntroDuration = IntroOpenStart + IntroOpenDuration;
     private bool _introClosing; // true = closing phase (bars sliding in)
     private bool _launcherWasOpen = true;
@@ -758,12 +758,8 @@ public class EditorApplication : Game
             StatusChip(paper, "hs_ver", clH, versionText, font);
             StatusChip(paper, "hs_proj", clH, projectText, font);
 
-            paper.Box("hs_cog").Width(clH).Height(clH).Rounded(EditorTheme.Roundness)
-                .Hovered.BackgroundColor(EditorTheme.Hover).End()
-                .Text(EditorIcons.Gear, font).TextColor(EditorTheme.Ink400)
-                .Hovered.TextColor(EditorTheme.Ink500).End()
-                .FontSize(EditorTheme.FontSize).Alignment(TextAlignment.MiddleCenter)
-                .OnClick(0, (_, _) => OpenPanel(typeof(ProjectSettingsPanel)));
+            Origami.IconButton(paper, "hs_cog", EditorIcons.Gear_I, () => OpenPanel(typeof(ProjectSettingsPanel)))
+                .Width(clH).Height(clH).Ghost().Show();
         }
     }
 
@@ -912,9 +908,6 @@ public class EditorApplication : Game
     // that store is subscribed to Debug.OnLog even before the Console panel is opened.
     private static void InitializeStatusBar() => ConsolePanel.EnsureSubscribed();
 
-    // Backend name shown in the footer. Only OpenGL exists today; when more backends land this
-    // should come from the graphics device.
-    private const string GraphicsBackend = "OpenGL 4.1";
 
     private void DrawStatusBar(Paper paper, float w, float h)
     {
@@ -1017,7 +1010,7 @@ public class EditorApplication : Game
 
                 paper.Box("sb_stats_spacer");
 
-                GlyphCell("sb_gfx", EditorIcons.Display, EditorTheme.Ink300, GraphicsBackend, EditorTheme.Ink400);
+                GlyphCell("sb_gfx", EditorIcons.Display, EditorTheme.Ink300, Graphics.BackendName, EditorTheme.Ink400);
 
                 Divider("sb_div3");
                 DrawGitCell();
@@ -1190,12 +1183,12 @@ public class EditorApplication : Game
     }
 
     // Brand animation timeline, in seconds from IntroBrandStart.
-    private const float SpinInEnd = 1.1f;      // edge on to facing, slowing but never stopping
-    private const float SpinOutEnd = 2.5f;     // one more full turn while shrinking, settling facing
-    private const float MoveStart = 2.15f;     // logo slides aside into the lockup
-    private const float MoveEnd = 3.05f;
-    private const float TextStart = 2.45f;     // wordmark fades in and unblurs
-    private const float TextEnd = 3.55f;
+    private const float SpinInEnd = 1.0f;      // edge on to facing, slowing but never stopping
+    private const float SpinOutEnd = 2.25f;    // one more full turn while shrinking, settling facing
+    private const float MoveStart = 1.95f;     // logo slides aside into the lockup
+    private const float MoveEnd = 2.75f;
+    private const float TextStart = 2.2f;      // wordmark fades in and unblurs
+    private const float TextEnd = 3.2f;
     private const float SpinStartScale = 1.8f; // logo size while spinning, relative to its lockup size
     private const float TextStartBlur = 18f;
 
